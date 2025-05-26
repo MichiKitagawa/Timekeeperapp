@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">Timekeeper</string>
+    <string name="accessibility_service_description">Timekeeperのアプリロック機能のために、フォアグラウンドアプリの情報を取得します。</string>
 </resources>
