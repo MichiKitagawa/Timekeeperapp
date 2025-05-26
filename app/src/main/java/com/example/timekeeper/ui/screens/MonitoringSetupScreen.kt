@@ -12,6 +12,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.navigation.NavController
+import androidx.navigation.compose.rememberNavController
+import com.example.timekeeper.utils.ErrorHandler
 
 data class AppInfo(
     val packageName: String,
@@ -22,6 +25,7 @@ data class AppInfo(
 @Composable
 fun MonitoringSetupScreen(
     onSetupComplete: () -> Unit,
+    navController: NavController = rememberNavController(),
     modifier: Modifier = Modifier
 ) {
     var selectedApp by remember { mutableStateOf<AppInfo?>(null) }
@@ -101,7 +105,26 @@ fun MonitoringSetupScreen(
         Spacer(modifier = Modifier.weight(1f))
         
         Button(
-            onClick = onSetupComplete,
+            onClick = {
+                try {
+                    // バリデーション
+                    val initialTimeInt = initialTime.toIntOrNull()
+                    val targetTimeInt = targetTime.toIntOrNull()
+                    
+                    if (initialTimeInt == null || targetTimeInt == null) {
+                        throw IllegalArgumentException("時間は数値で入力してください")
+                    }
+                    
+                    if (targetTimeInt >= initialTimeInt) {
+                        throw IllegalArgumentException("目標時間は初期時間より小さく設定してください")
+                    }
+                    
+                    // 設定完了
+                    onSetupComplete()
+                } catch (e: Exception) {
+                    ErrorHandler.handleException(navController, e)
+                }
+            },
             modifier = Modifier
                 .fillMaxWidth()
                 .height(56.dp),

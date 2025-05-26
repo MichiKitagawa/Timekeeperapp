@@ -11,6 +11,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.navigation.NavController
+import androidx.navigation.compose.rememberNavController
+import com.example.timekeeper.utils.ErrorHandler
 
 data class MonitoredApp(
     val appName: String,
@@ -21,6 +24,7 @@ data class MonitoredApp(
 @Composable
 fun DashboardScreen(
     onAppLimitExceeded: (String) -> Unit,
+    navController: NavController = rememberNavController(),
     modifier: Modifier = Modifier
 ) {
     // サンプルデータ（実際の実装ではRoomから取得）
@@ -48,7 +52,13 @@ fun DashboardScreen(
             items(monitoredApps) { app ->
                 AppUsageCard(
                     app = app,
-                    onLimitExceeded = { onAppLimitExceeded(app.appName) }
+                    onLimitExceeded = { 
+                        try {
+                            onAppLimitExceeded(app.appName)
+                        } catch (e: Exception) {
+                            ErrorHandler.handleException(navController, e)
+                        }
+                    }
                 )
             }
         }

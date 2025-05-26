@@ -10,12 +10,16 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.navigation.NavController
+import androidx.navigation.compose.rememberNavController
+import com.example.timekeeper.utils.ErrorHandler
 
 @Composable
 fun LockScreen(
     appName: String,
     unlockPrice: Int,
     onUnlockClick: () -> Unit,
+    navController: NavController = rememberNavController(),
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -43,7 +47,13 @@ fun LockScreen(
         )
         
         Button(
-            onClick = onUnlockClick,
+            onClick = {
+                try {
+                    onUnlockClick()
+                } catch (e: Exception) {
+                    ErrorHandler.handleException(navController, e)
+                }
+            },
             modifier = Modifier
                 .fillMaxWidth()
                 .height(56.dp),

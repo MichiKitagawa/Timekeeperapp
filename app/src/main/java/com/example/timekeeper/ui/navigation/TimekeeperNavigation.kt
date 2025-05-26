@@ -38,7 +38,8 @@ fun TimekeeperNavigation(
                     navController.navigate(TimekeeperRoutes.MONITORING_SETUP) {
                         popUpTo(TimekeeperRoutes.LICENSE_PURCHASE) { inclusive = true }
                     }
-                }
+                },
+                navController = navController
             )
         }
         
@@ -50,7 +51,8 @@ fun TimekeeperNavigation(
                     navController.navigate(TimekeeperRoutes.DASHBOARD) {
                         popUpTo(TimekeeperRoutes.MONITORING_SETUP) { inclusive = true }
                     }
-                }
+                },
+                navController = navController
             )
         }
         
@@ -60,7 +62,8 @@ fun TimekeeperNavigation(
                 onAppLimitExceeded = { appName ->
                     // アプリの制限時間に達した場合、ロック画面へ遷移
                     navController.navigate("${TimekeeperRoutes.LOCK_SCREEN}/$appName")
-                }
+                },
+                navController = navController
             )
         }
         
@@ -77,7 +80,8 @@ fun TimekeeperNavigation(
                 onUnlockClick = {
                     // アンロックボタン押下時、デイパス購入画面へ遷移
                     navController.navigate(TimekeeperRoutes.DAY_PASS_PURCHASE)
-                }
+                },
+                navController = navController
             )
         }
         
@@ -97,7 +101,8 @@ fun TimekeeperNavigation(
                 onCancelClick = {
                     // キャンセル時は前の画面に戻る
                     navController.popBackStack()
-                }
+                },
+                navController = navController
             )
         }
         
