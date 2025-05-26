@@ -58,6 +58,28 @@ dependencies {
     implementation("androidx.room:room-ktx:$roomVersion")
     testImplementation("androidx.room:room-testing:$roomVersion")
 
+    // Retrofit & OkHttp for API client
+    val retrofitVersion = "2.9.0"
+    val okhttpVersion = "4.12.0"
+    implementation("com.squareup.retrofit2:retrofit:$retrofitVersion")
+    implementation("com.squareup.retrofit2:converter-gson:$retrofitVersion")
+    implementation("com.squareup.okhttp3:okhttp:$okhttpVersion")
+    implementation("com.squareup.okhttp3:logging-interceptor:$okhttpVersion")
+    
+    // Gson for JSON serialization
+    implementation("com.google.code.gson:gson:2.10.1")
+    
+    // Coroutines for async operations
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
+    
+    // MockWebServer for testing
+    testImplementation("com.squareup.okhttp3:mockwebserver:$okhttpVersion")
+    androidTestImplementation("com.squareup.okhttp3:mockwebserver:$okhttpVersion")
+    
+    // Coroutines test
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.3")
+    androidTestImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.3")
+
     // Unit Testing
     testImplementation(libs.junit) // junit:junit:4.13.2
 
