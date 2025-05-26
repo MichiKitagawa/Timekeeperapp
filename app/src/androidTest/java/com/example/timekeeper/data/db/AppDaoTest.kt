@@ -37,42 +37,50 @@ class AppDaoTest {
 
     @Test
     @Throws(Exception::class)
-    fun insertAndGetApp() = runBlocking {
-        val app = AppEntity("com.example.app", "Test App", 60, 30, 60, 0)
-        appDao.insertApp(app)
-        val retrievedApp = appDao.getAppByPackageName("com.example.app")
-        assertThat(retrievedApp).isEqualTo(app)
+    fun insertAndGetApp() {
+        runBlocking {
+            val app = AppEntity("com.example.app", "Test App", 60, 30, 60, 0)
+            appDao.insertApp(app)
+            val retrievedApp = appDao.getAppByPackageName("com.example.app")
+            assertThat(retrievedApp).isEqualTo(app)
+        }
     }
 
     @Test
     @Throws(Exception::class)
-    fun getAllApps() = runBlocking {
-        val app1 = AppEntity("com.example.app1", "Test App 1", 60, 30, 60, 0)
-        val app2 = AppEntity("com.example.app2", "Test App 2", 120, 60, 120, 0)
-        appDao.insertApp(app1)
-        appDao.insertApp(app2)
-        val allApps = appDao.getAllApps()
-        assertThat(allApps).containsExactly(app1, app2)
+    fun getAllApps() {
+        runBlocking {
+            val app1 = AppEntity("com.example.app1", "Test App 1", 60, 30, 60, 0)
+            val app2 = AppEntity("com.example.app2", "Test App 2", 120, 60, 120, 0)
+            appDao.insertApp(app1)
+            appDao.insertApp(app2)
+            val allApps = appDao.getAllApps()
+            assertThat(allApps).containsExactly(app1, app2)
+        }
     }
 
     @Test
     @Throws(Exception::class)
-    fun updateApp() = runBlocking {
-        val app = AppEntity("com.example.app", "Test App", 60, 30, 60, 0)
-        appDao.insertApp(app)
-        val updatedApp = app.copy(label = "Updated Test App", current_limit_minutes = 50)
-        appDao.updateApp(updatedApp)
-        val retrievedApp = appDao.getAppByPackageName("com.example.app")
-        assertThat(retrievedApp).isEqualTo(updatedApp)
+    fun updateApp() {
+        runBlocking {
+            val app = AppEntity("com.example.app", "Test App", 60, 30, 60, 0)
+            appDao.insertApp(app)
+            val updatedApp = app.copy(label = "Updated Test App", current_limit_minutes = 50)
+            appDao.updateApp(updatedApp)
+            val retrievedApp = appDao.getAppByPackageName("com.example.app")
+            assertThat(retrievedApp).isEqualTo(updatedApp)
+        }
     }
 
     @Test
     @Throws(Exception::class)
-    fun deleteApp() = runBlocking {
-        val app = AppEntity("com.example.app", "Test App", 60, 30, 60, 0)
-        appDao.insertApp(app)
-        appDao.deleteApp(app)
-        val retrievedApp = appDao.getAppByPackageName("com.example.app")
-        assertThat(retrievedApp).isNull()
+    fun deleteApp() {
+        runBlocking {
+            val app = AppEntity("com.example.app", "Test App", 60, 30, 60, 0)
+            appDao.insertApp(app)
+            appDao.deleteApp(app)
+            val retrievedApp = appDao.getAppByPackageName("com.example.app")
+            assertThat(retrievedApp).isNull()
+        }
     }
 } 
