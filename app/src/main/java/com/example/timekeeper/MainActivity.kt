@@ -12,6 +12,8 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.navigation.compose.rememberNavController
+import com.example.timekeeper.ui.navigation.TimekeeperNavigation
 import com.example.timekeeper.ui.theme.TimekeeperTheme
 import java.util.UUID
 
@@ -39,9 +41,10 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             TimekeeperTheme {
+                val navController = rememberNavController()
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                    Greeting(
-                        name = "Device ID: $appSpecificDeviceId", // Display device ID for now
+                    TimekeeperNavigation(
+                        navController = navController,
                         modifier = Modifier.padding(innerPadding)
                     )
                 }

@@ -50,6 +50,11 @@ dependencies {
     implementation(libs.androidx.ui.graphics)
     implementation(libs.androidx.ui.tooling.preview)
     implementation(libs.androidx.material3)
+    
+    // Navigation Compose
+    val navVersion = "2.7.6"
+    implementation("androidx.navigation:navigation-compose:$navVersion")
+    androidTestImplementation("androidx.navigation:navigation-testing:$navVersion")
 
     // Room
     val roomVersion = "2.6.1"
