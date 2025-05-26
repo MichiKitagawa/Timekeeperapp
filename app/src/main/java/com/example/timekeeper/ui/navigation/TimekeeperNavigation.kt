@@ -92,19 +92,22 @@ fun TimekeeperNavigation(
         
         // P05: デイパス決済画面
         composable(TimekeeperRoutes.DAY_PASS_PURCHASE) {
-            // サンプルのunlock_count（実際の実装ではSharedPreferencesから取得）
-            val unlockCount = 0
-            
+            // unlockCount は DayPassPurchaseScreen 内部で SharedPreferences から取得するようになったため削除
+            // val unlockCount = 0 
+
             DayPassPurchaseScreen(
-                unlockCount = unlockCount,
-                onPurchaseClick = {
+                // unlockCount = unlockCount, // 削除
+                onPurchaseSuccess = { // onPurchaseClick から変更
                     // デイパス購入処理後、ダッシュボードへ戻る
+                    // この時、P04とP05はスタックからクリアされる想定
                     navController.navigate(TimekeeperRoutes.DASHBOARD) {
-                        popUpTo(TimekeeperRoutes.DASHBOARD) { inclusive = false }
+                        // P04(LockScreen)とP05(DayPassPurchaseScreen)をスタックから削除し、P03(Dashboard)を表示
+                        popUpTo(TimekeeperRoutes.LOCK_SCREEN) { inclusive = true }
+                        launchSingleTop = true // Dashboardが既にスタックのトップにある場合は再作成しない
                     }
                 },
                 onCancelClick = {
-                    // キャンセル時は前の画面に戻る
+                    // キャンセル時は前の画面に戻る (P04 LockScreen)
                     navController.popBackStack()
                 },
                 navController = navController
