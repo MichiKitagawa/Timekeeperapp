@@ -62,9 +62,19 @@ dependencies {
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
+    androidTestImplementation("androidx.test.ext:junit-ktx:1.2.1")
+    androidTestImplementation("androidx.test:runner:1.2.1")
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.ui.test.junit4)
+
+    // AndroidX Test Orchestrator (androidTestUtil)
+    "androidTestUtil"("androidx.test:orchestrator:1.5.0")
+
+    // Truth
+    testImplementation("com.google.truth:truth:1.1.3") // 必要に応じてバージョンを確認
+    androidTestImplementation("com.google.truth:truth:1.1.3") // 必要に応じてバージョンを確認
+
     debugImplementation(libs.androidx.ui.tooling)
     debugImplementation(libs.androidx.ui.test.manifest)
 }
