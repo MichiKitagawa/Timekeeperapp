@@ -7,6 +7,31 @@ from typing import Optional
 import firebase_admin
 from firebase_admin import credentials, firestore
 from google.cloud.firestore import Client
+import stripe # Stripeライブラリをインポート
+
+
+class StripeConfig:
+    """Stripe設定クラス"""
+
+    def __init__(self):
+        self.api_key: Optional[str] = os.getenv('STRIPE_API_KEY')
+        self.webhook_secret: Optional[str] = os.getenv('STRIPE_WEBHOOK_SECRET') # 将来的にWebhookで使用する可能性を考慮
+        self._initialized: bool = False
+        self.initialize_stripe()
+
+    def initialize_stripe(self) -> bool:
+        """Stripe APIキーを設定"""
+        if self.api_key:
+            stripe.api_key = self.api_key
+            self._initialized = True
+            print("Stripe initialized successfully")
+            return True
+        print("Warning: STRIPE_API_KEY not found in environment variables.")
+        return False
+
+    def is_initialized(self) -> bool:
+        """Stripeが初期化済みかどうかを確認"""
+        return self._initialized
 
 
 class FirestoreConfig:
@@ -134,4 +159,7 @@ class FirestoreConfig:
 
 
 # グローバルなFirestore設定インスタンス
-firestore_config = FirestoreConfig() 
+firestore_config = FirestoreConfig()
+
+# グローバルなStripe設定インスタンス
+stripe_config = StripeConfig() 

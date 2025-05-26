@@ -6,7 +6,13 @@ import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
-import com.example.timekeeper.ui.screens.*
+import com.example.timekeeper.ui.screens.DashboardScreen
+import com.example.timekeeper.ui.screens.DayPassPurchaseScreen
+import com.example.timekeeper.ui.screens.ErrorScreen
+import com.example.timekeeper.ui.screens.ErrorType
+import com.example.timekeeper.ui.screens.LicenseScreen
+import com.example.timekeeper.ui.screens.LockScreen
+import com.example.timekeeper.ui.screens.MonitoringSetupScreen
 import kotlin.math.pow
 
 // ナビゲーションルート定義
@@ -32,14 +38,13 @@ fun TimekeeperNavigation(
     ) {
         // P01: ライセンス購入画面
         composable(TimekeeperRoutes.LICENSE_PURCHASE) {
-            LicensePurchaseScreen(
-                onPurchaseClick = {
-                    // ライセンス購入処理後、監視対象設定画面へ遷移
+            LicenseScreen(
+                navController = navController,
+                onNavigateToMonitoringSetup = {
                     navController.navigate(TimekeeperRoutes.MONITORING_SETUP) {
                         popUpTo(TimekeeperRoutes.LICENSE_PURCHASE) { inclusive = true }
                     }
-                },
-                navController = navController
+                }
             )
         }
         
@@ -132,6 +137,12 @@ fun TimekeeperNavigation(
                         ErrorType.PAYMENT_SUCCESS_BUT_UNLOCK_FAILED -> {
                             // 問い合わせ処理（実際の実装では外部アプリ起動等）
                             navController.popBackStack()
+                        }
+                        ErrorType.PAYMENT_VERIFICATION_FAILED -> {
+                            // ライセンス購入画面へ遷移
+                            navController.navigate(TimekeeperRoutes.LICENSE_PURCHASE) {
+                                popUpTo(0) { inclusive = true }
+                            }
                         }
                     }
                 }

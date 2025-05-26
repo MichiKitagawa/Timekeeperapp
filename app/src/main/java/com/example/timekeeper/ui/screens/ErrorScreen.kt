@@ -14,7 +14,8 @@ import androidx.compose.ui.unit.sp
 enum class ErrorType {
     LICENSE_REQUIRED,
     UNEXPECTED_ERROR,
-    PAYMENT_SUCCESS_BUT_UNLOCK_FAILED
+    PAYMENT_SUCCESS_BUT_UNLOCK_FAILED,
+    PAYMENT_VERIFICATION_FAILED
 }
 
 @Composable
@@ -35,6 +36,10 @@ fun ErrorScreen(
         ErrorType.PAYMENT_SUCCESS_BUT_UNLOCK_FAILED -> Pair(
             "課金は成功しましたが、ロック解除に失敗しました",
             "問い合わせる"
+        )
+        ErrorType.PAYMENT_VERIFICATION_FAILED -> Pair(
+            "決済の検証に失敗しました。",
+            "やり直す"
         )
     }
     
