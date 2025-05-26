@@ -202,13 +202,92 @@ async def unlock_daypass(request: UnlockDaypassRequest):
         HTTPException: その他のエラー
     """
     # リクエストバリデーション
-    validated_data = RequestValidator.validate_unlock_daypass_request(request.model_dump())
-    
-    # TODO: Stripe検証とFirestore更新の実装
-    # 現在は基本的なバリデーションのみ実装
-    
+    try:
+        validated_data = RequestValidator.validate_unlock_daypass_request(request.model_dump())
+        device_id = validated_data['device_id']
+        purchase_token = validated_data['purchase_token']
+    except ValidationError as e:
+        raise HTTPException(
+            status_code=e.status_code,
+            detail={"error_code": e.error_code, "message": e.message}
+        )
+
+    if not stripe_config.is_initialized():
+        raise HTTPException(
+            status_code=503,
+            detail={"error_code": "stripe_not_initialized", "message": "Stripe is not initialized. Check API key."}
+        )
+
+    db = firestore_config.get_client()
+    if not db:
+        raise HTTPException(
+            status_code=503,
+            detail={"error_code": "firestore_not_initialized", "message": "Firestore is not initialized."}
+        )
+
+    # Stripe API と連携し purchase_token を検証
+    try:
+        session = stripe.checkout.Session.retrieve(purchase_token)
+        if session.payment_status != 'paid':
+            raise HTTPException(
+                status_code=400,
+                detail={"error_code": "payment_not_completed", "message": "Payment not completed or failed."}
+            )
+        # ここで顧客情報や支払い金額を検証することも可能
+    except stripe.error.StripeError as e:
+        raise HTTPException(
+            status_code=e.http_status or 500,
+            detail={"error_code": "stripe_api_error", "message": str(e)}
+        )
+    except Exception as e: # その他の予期せぬエラー
+        raise HTTPException(
+            status_code=500,
+            detail={"error_code": "payment_verification_failed", "message": f"Stripe purchase_token validation failed: {str(e)}"}
+        )
+
+    # Firestore の devices コレクションで unlock_count をインクリメント、last_unlock_date を更新
+    try:
+        device_ref = db.collection('devices').document(device_id)
+        device_doc = device_ref.get()
+
+        if not device_doc.exists:
+            # TC6: 未登録 device_id でリクエストがあった場合にエラーレスポンスが返却されること
+            raise HTTPException(
+                status_code=404, # Not Found
+                detail={"error_code": "device_not_found", "message": "device_id が未登録です"}
+            )
+
+        current_unlock_count = device_doc.to_dict().get('unlock_count', 0)
+        new_unlock_count = current_unlock_count + 1
+        today_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+        update_data = {
+            'unlock_count': new_unlock_count,
+            'last_unlock_date': today_str # FirestoreのDate型ではなく文字列で保存（仕様書と合わせる）
+            # 'purchase_tokens': firestore.ArrayUnion([purchase_token]) # 既存の配列に追加する場合
+        }
+        device_ref.update(update_data)
+        print(f"Daypass unlock information updated for device_id: {device_id}. New unlock_count: {new_unlock_count}")
+
+    except HTTPException as e: # 上でraiseされたHTTPExceptionをそのまま再throw
+        raise e
+    except Exception as e:
+        # Firestoreエラー (TC9のケースに該当しうる)
+        # P06のケース: 課金は成功したが、Firestore更新に失敗した場合のハンドリング
+        print(f"Error updating Firestore for daypass, device_id {device_id}: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail={"error_code": "firestore_update_failed", "message": f"Failed to update daypass information in Firestore: {str(e)}"}
+        )
+
+    # 成功レスポンス返却 (TC4)
     return UnlockDaypassResponse(
         status="ok",
-        unlock_count=1,
-        last_unlock_date="2025-01-27"
-    ) 
+        unlock_count=new_unlock_count,
+        last_unlock_date=today_str
+    )
+
+# アプリケーションの実行（開発用）
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000) 

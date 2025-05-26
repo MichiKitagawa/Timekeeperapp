@@ -208,39 +208,39 @@
     - [x] 6.1.4. `/unlock/daypass` API 呼び出し処理 (成功/失敗ハンドリング)
       - **参照ドキュメント:** `docs/03_API仕様/API詳細.md` (`/unlock/daypass`), `docs/03_API仕様/Stripe連携フロー.md`
       - **テスト:**
-        - [ ] API呼び出し成功時に`unlock_count`, `last_unlock_date` が更新されること
-        - [ ] API呼び出し失敗時にエラーメッセージが表示されること (P06連携)
+        - [x] API呼び出し成功時に`unlock_count`, `last_unlock_date` が更新されること
+        - [x] API呼び出し失敗時にエラーメッセージが表示されること (P06連携)
     - [x] 6.1.5. 決済成功時の状態更新 (`unlock_count`, `last_unlock_date` の SharedPreferences 保存)
       - **参照ドキュメント:** `docs/01_概要・全体像/技術仕様書.md`
       - **テスト:**
-        - [ ] 決済成功後、SharedPreferencesの `unlock_count` と `last_unlock_date` が正しく更新されること
+        - [x] 決済成功後、SharedPreferencesの `unlock_count` と `last_unlock_date` が正しく更新されること
     - [x] 6.1.6. 画面クローズ、ロック解除処理
       - **参照ドキュメント:** `docs/02_画面設計/画面遷移図.md`
       - **テスト:**
-        - [ ] 決済成功後、P05画面が閉じられ、アプリのロックが解除されること
+        - [x] 決済成功後、P05画面が閉じられ、アプリのロックが解除されること
 
-  - [ ] **6.2. バックエンド (`/unlock/daypass` API)**
-    - [ ] 6.2.1. リクエストバリデーション (`device_id`, `purchase_token`)
+  - [x] **6.2. バックエンド (`/unlock/daypass` API)**
+    - [x] 6.2.1. リクエストバリデーション (`device_id`, `purchase_token`)
       - **参照ドキュメント:** `docs/03_API仕様/API詳細.md` (`/unlock/daypass`), `docs/05_詳細仕様/バリデーション.md`, `docs/03_API仕様/Stripe連携フロー.md`
       - **テスト (TC6):**
-        - [ ] 未登録 `device_id` でリクエストがあった場合にエラーレスポンスが返却されること
-    - [ ] 6.2.2. Stripe API と連携し `purchase_token` を検証
+        - [x] 未登録 `device_id` でリクエストがあった場合にエラーレスポンスが返却されること
+    - [x] 6.2.2. Stripe API と連携し `purchase_token` を検証
       - **参照ドキュメント:** `docs/01_概要・全体像/技術仕様書.md` (Stripe連携部分), `docs/03_API仕様/Stripe連携フロー.md`
       - **テスト (TC5):**
-        - [ ] 不正な `purchase_token` でリクエストがあった場合にエラーレスポンスが返却されること
-    - [ ] 6.2.3. Firestore の `devices` コレクションで `unlock_count` をインクリメント、`last_unlock_date` を更新
+        - [x] 不正な `purchase_token` でリクエストがあった場合にエラーレスポンスが返却されること
+    - [x] 6.2.3. Firestore の `devices` コレクションで `unlock_count` をインクリメント、`last_unlock_date` を更新
       - **参照ドキュメント:** `docs/04_データ設計/データベース.md`
       - **テスト (TC4):**
-        - [ ] 正常なリクエストでFirestoreの `devices` コレクションの `unlock_count` と `last_unlock_date` が正しく更新されること
-    - [ ] 6.2.4. 成功レスポンス返却 (`status`, `unlock_count`, `last_unlock_date`)
+        - [x] 正常なリクエストでFirestoreの `devices` コレクションの `unlock_count` と `last_unlock_date` が正しく更新されること
+    - [x] 6.2.4. 成功レスポンス返却 (`status`, `unlock_count`, `last_unlock_date`)
       - **参照ドキュメント:** `docs/03_API仕様/API詳細.md` (`/unlock/daypass`)
       - **テスト (TC4):**
-        - [ ] 正常処理完了時に成功レスポンス (`status`, `unlock_count`, `last_unlock_date`) が返却されること
-    - [ ] 6.2.5. エラーレスポンス返却 (トークン不正、Stripe検証失敗など)
+        - [x] 正常処理完了時に成功レスポンス (`status`, `unlock_count`, `last_unlock_date`) が返却されること
+    - [x] 6.2.5. エラーレスポンス返却 (トークン不正、Stripe検証失敗など)
       - **参照ドキュメント:** `docs/03_API仕様/API詳細.md` (`/unlock/daypass`), `docs/05_詳細仕様/エラーハンドリング.md`
       - **テスト (TC5):**
-        - [ ] トークン不正時に適切なエラーレスポンスが返却されること
-        - [ ] Stripe検証失敗時に適切なエラーレスポンスが返却されること
+        - [x] トークン不正時に適切なエラーレスポンスが返却されること
+        - [x] Stripe検証失敗時に適切なエラーレスポンスが返却されること
 
 ---
 
