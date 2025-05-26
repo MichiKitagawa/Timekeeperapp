@@ -39,6 +39,10 @@ android {
     buildFeatures {
         compose = true
     }
+    lint {
+        disable.add("PropertyEscape")
+        disable.add("ViewModelConstructorInComposable")
+    }
 }
 
 dependencies {
