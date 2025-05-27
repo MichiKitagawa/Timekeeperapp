@@ -11,7 +11,16 @@ data class LicenseConfirmRequest(
 /**
  * デイパス購入API のリクエスト
  */
-data class DaypassUnlockRequest(
+data class UnlockDaypassRequest(
     val device_id: String,
     val purchase_token: String
+)
+
+/**
+ * Stripe Checkoutセッション作成APIのリクエスト
+ */
+data class CreateCheckoutSessionRequest(
+    val device_id: String,
+    val product_type: String, // "license" or "daypass"
+    val unlock_count: Int?   // デイパスの場合のみ使用
 ) 

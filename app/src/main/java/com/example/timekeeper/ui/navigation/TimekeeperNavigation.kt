@@ -29,7 +29,9 @@ object TimekeeperRoutes {
 fun TimekeeperNavigation(
     navController: NavHostController = rememberNavController(),
     startDestination: String = TimekeeperRoutes.LICENSE_PURCHASE,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onPurchaseLicenseClick: () -> Unit = {},
+    onPurchaseDaypassClick: (Int?) -> Unit = {}
 ) {
     NavHost(
         navController = navController,
@@ -44,7 +46,8 @@ fun TimekeeperNavigation(
                     navController.navigate(TimekeeperRoutes.MONITORING_SETUP) {
                         popUpTo(TimekeeperRoutes.LICENSE_PURCHASE) { inclusive = true }
                     }
-                }
+                },
+                onPurchaseLicenseClick = onPurchaseLicenseClick
             )
         }
         
@@ -110,7 +113,8 @@ fun TimekeeperNavigation(
                     // キャンセル時は前の画面に戻る (P04 LockScreen)
                     navController.popBackStack()
                 },
-                navController = navController
+                navController = navController,
+                onPurchaseDaypassClick = onPurchaseDaypassClick
             )
         }
         

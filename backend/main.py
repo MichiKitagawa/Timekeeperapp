@@ -3,17 +3,22 @@ Timekeeper Backend API
 FastAPIを使用したバックエンドサーバー
 """
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request as FastAPIRequest
 from config import firestore_config, stripe_config
 from middleware import ErrorHandlingMiddleware
 from validation import RequestValidator, ValidationError
 from models import (
     LicenseConfirmRequest, LicenseConfirmResponse,
     UnlockDaypassRequest, UnlockDaypassResponse,
-    ErrorResponse
+    ErrorResponse,
+    CreateCheckoutSessionRequest, CreateCheckoutSessionResponse
 )
 import stripe
 from datetime import datetime, timezone
+
+# 定数を定義
+YOUR_APP_DOMAIN = "https://example.com" # HTTP/HTTPSのダミードメインに変更
+LICENSE_PRICE_ID = "price_1RSoQKCplaJfZ2mW9cv8EVSw" # Stripeダッシュボードで設定したライセンス商品の価格ID
 
 
 @asynccontextmanager
@@ -74,6 +79,71 @@ async def firestore_status():
         "environment": firestore_config.environment
     }
 
+@app.post("/create-checkout-session", response_model=CreateCheckoutSessionResponse, responses={400: {"model": ErrorResponse}, 500: {"model": ErrorResponse}})
+async def create_checkout_session(request: CreateCheckoutSessionRequest):
+    """
+    Stripe Checkoutセッションを作成し、決済ページURLを返却するAPI
+    """
+    if not stripe_config.is_initialized():
+        raise HTTPException(
+            status_code=503,
+            detail={"error_code": "stripe_not_initialized", "message": "Stripe is not initialized. Check API key."}
+        )
+
+    line_items = []
+    if request.product_type == "license":
+        if not LICENSE_PRICE_ID:
+             raise HTTPException(status_code=500, detail={"error_code": "license_price_id_not_configured", "message": "License Price ID is not configured."})
+        line_items.append({"price": LICENSE_PRICE_ID, "quantity": 1})
+    elif request.product_type == "daypass":
+        unlock_count = request.unlock_count if request.unlock_count is not None and request.unlock_count >= 0 else 0
+        price_amount = int(200 * (1.2 ** unlock_count))
+        product_name = f"デイパス ({unlock_count + 1}回目)"
+
+        line_items.append({
+            "price_data": {
+                "currency": "jpy",
+                "product_data": {
+                    "name": product_name,
+                },
+                "unit_amount": price_amount,
+            },
+            "quantity": 1,
+        })
+    else:
+        raise HTTPException(status_code=400, detail={"error_code": "invalid_product_type", "message": "Invalid product type provided."})
+
+    if not line_items:
+         raise HTTPException(status_code=500, detail={"error_code": "line_items_empty", "message": "No items to purchase."})
+
+    try:
+        checkout_session = stripe.checkout.Session.create(
+            payment_method_types=['card'],
+            line_items=line_items,
+            mode='payment',
+            success_url=f"app://com.example.timekeeper/checkout-success?session_id={{CHECKOUT_SESSION_ID}}&product_type={request.product_type}",
+            cancel_url=f"app://com.example.timekeeper/checkout-cancel",
+            metadata={
+                'device_id': request.device_id,
+                'product_type': request.product_type
+            }
+        )
+        return CreateCheckoutSessionResponse(checkout_url=checkout_session.url)
+    except stripe.error.StripeError as e:
+        error_message = str(e)
+        if hasattr(e, 'user_message') and e.user_message: # Check if user_message exists
+            error_message = e.user_message
+        print(f"Stripe API error: {str(e)}")
+        raise HTTPException(
+            status_code=e.http_status or 500,
+            detail={"error_code": "stripe_api_error", "message": f"Stripe API error: {error_message}"}
+        )
+    except Exception as e:
+        print(f"Unexpected error creating checkout session: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail={"error_code": "checkout_session_creation_failed", "message": f"An unexpected error occurred while creating the checkout session: {str(e)}"}
+        )
 
 @app.post("/license/confirm", response_model=LicenseConfirmResponse, responses={400: {"model": ErrorResponse}, 404: {"model": ErrorResponse}, 500: {"model": ErrorResponse}})
 async def license_confirm(request: LicenseConfirmRequest):
@@ -286,6 +356,114 @@ async def unlock_daypass(request: UnlockDaypassRequest):
         unlock_count=new_unlock_count,
         last_unlock_date=today_str
     )
+
+
+@app.post("/stripe-webhook", include_in_schema=False) # APIドキュメントには表示しない
+async def stripe_webhook(request: FastAPIRequest):
+    """
+    StripeからのWebhookイベントを受信し処理するAPI
+    checkout.session.completed イベントを主に処理する
+    """
+    if not stripe_config.webhook_secret:
+        print("Warning: STRIPE_WEBHOOK_SECRET is not set. Webhook validation will be skipped (unsafe for production).")
+
+    payload_body = await request.body()
+    sig_header = request.headers.get('stripe-signature')
+
+    event = None # イベントオブジェクトを初期化
+    try:
+        if stripe_config.webhook_secret and sig_header:
+            event = stripe.Webhook.construct_event(
+                payload_body, sig_header, stripe_config.webhook_secret
+            )
+        elif sig_header: # ヘッダーはあるがシークレットがない場合（設定ミスなど）
+            print("Error: Stripe webhook secret is not configured, but signature header was received. Signature validation failed.")
+            raise HTTPException(status_code=500, detail="Webhook secret not configured for signature validation.")
+        else: # ローカルテスト等でシグネチャヘッダーもシークレットもない場合
+            event = stripe.Event.construct_from(
+                stripe.util.json.loads(payload_body.decode('utf-8')), stripe_config.api_key
+            )
+            print("Warning: Webhook signature validation skipped (no secret or signature header).")
+
+    except ValueError as e:
+        print(f"Webhook ValueError (Invalid payload): {str(e)}")
+        raise HTTPException(status_code=400, detail="Invalid payload")
+    except stripe.error.SignatureVerificationError as e:
+        print(f"Webhook SignatureVerificationError (Invalid signature): {str(e)}")
+        raise HTTPException(status_code=400, detail="Invalid signature")
+    except HTTPException as e: # 内部でraiseしたHTTPExceptionをキャッチして再throw
+        raise e
+    except Exception as e:
+        print(f"Webhook construction/validation error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Webhook event construction/validation error: {str(e)}")
+
+    if not event:
+        print("Error: Webhook event object is None after construction attempts.")
+        raise HTTPException(status_code=500, detail="Failed to construct webhook event object.")
+
+    if event.type == 'checkout.session.completed':
+        session = event.data.object
+        print(f"Received checkout.session.completed event for session: {session.id}")
+
+        metadata = session.get('metadata', {})
+        device_id = metadata.get('device_id')
+        product_type = metadata.get('product_type')
+
+        if not device_id or not product_type:
+            print(f"Error: Missing device_id or product_type in webhook metadata for session {session.id}")
+            return {"status": "error", "message": "Missing metadata, event not processed further."}
+
+        db = firestore_config.get_client()
+        if not db:
+            print(f"Error: Firestore not initialized. Cannot process webhook for session {session.id}")
+            return {"status": "error", "message": "Firestore not initialized, event not processed further."}
+
+        try:
+            if product_type == "license":
+                device_ref = db.collection('devices').document(device_id)
+                doc_data = {
+                    'license_purchased': True,
+                    'license_purchase_date': datetime.now(timezone.utc),
+                    'last_successful_payment_intent': session.get('payment_intent')
+                }
+                current_doc = device_ref.get()
+                if current_doc.exists:
+                    device_ref.update(doc_data)
+                    print(f"Webhook: License updated for device_id: {device_id}")
+                else:
+                    device_ref.set(doc_data)
+                    print(f"Webhook: License created for device_id: {device_id}")
+
+            elif product_type == "daypass":
+                device_ref = db.collection('devices').document(device_id)
+                device_doc = device_ref.get()
+                if not device_doc.exists:
+                    print(f"Webhook Error: Device_id {device_id} not found for daypass purchase (session: {session.id})")
+                    return {"status": "error", "message": "Device not found for daypass, event not processed further."}
+                
+                current_data = device_doc.to_dict()
+                current_unlock_count = current_data.get('unlock_count', 0) if current_data else 0
+                new_unlock_count = current_unlock_count + 1
+                today_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+                update_data = {
+                    'unlock_count': new_unlock_count,
+                    'last_unlock_date': today_str,
+                    'last_successful_payment_intent': session.get('payment_intent')
+                }
+                device_ref.update(update_data)
+                print(f"Webhook: Daypass updated for device_id: {device_id}. New unlock_count: {new_unlock_count}")
+            else:
+                print(f"Warning: Unknown product_type '{product_type}' in webhook for session {session.id}")
+        
+        except Exception as e:
+            print(f"Error processing webhook event (Firestore update failed) for session {session.id}: {str(e)}")
+            return {"status": "error", "message": "Firestore update failed during webhook processing"}
+
+    else:
+        print(f"Received unhandled event type: {event.type}")
+
+    return {"status": "received"}
+
 
 # アプリケーションの実行（開発用）
 if __name__ == "__main__":

@@ -1,6 +1,6 @@
 package com.example.timekeeper.data.api
 
-import java.util.Date // DaypassUnlockResponseのために追加
+// import java.util.Date // 不要なため削除
 
 /**
  * APIレスポンスの共通ラッパー
@@ -21,10 +21,17 @@ data class LicenseConfirmResponse(
 /**
  * デイパス購入APIのレスポンス
  */
-data class DaypassUnlockResponse(
+data class UnlockDaypassResponse( // DaypassUnlockResponse から UnlockDaypassResponse にリネーム
     val status: String,
     val unlock_count: Int,
     val last_unlock_date: String // APIからは YYYY-MM-DD 形式の文字列で返る
+)
+
+/**
+ * Stripe Checkoutセッション作成APIのレスポンス
+ */
+data class CreateCheckoutSessionResponse(
+    val checkout_url: String
 )
 
 /**

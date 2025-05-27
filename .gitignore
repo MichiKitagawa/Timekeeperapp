@@ -57,3 +57,5 @@ backend/venv_temp/
 # OS
 .DS_Store
 Thumbs.db
+
+.env

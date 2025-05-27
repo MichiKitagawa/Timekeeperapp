@@ -10,6 +10,15 @@ import retrofit2.http.POST
 interface TimekeeperApiService {
     
     /**
+     * Stripe Checkoutセッションを作成します。
+     * 
+     * @param request Checkoutセッション作成リクエスト
+     * @return Checkoutセッション作成レスポンス (決済URLを含む)
+     */
+    @POST("create-checkout-session")
+    suspend fun createCheckoutSession(@Body request: CreateCheckoutSessionRequest): Response<CreateCheckoutSessionResponse>
+    
+    /**
      * ライセンス購入完了の通知と状態登録／更新
      * 
      * @param request ライセンス確認リクエスト
@@ -25,5 +34,5 @@ interface TimekeeperApiService {
      * @return デイパス購入レスポンス
      */
     @POST("unlock/daypass")
-    suspend fun unlockDaypass(@Body request: DaypassUnlockRequest): Response<DaypassUnlockResponse>
+    suspend fun unlockDaypass(@Body request: UnlockDaypassRequest): Response<UnlockDaypassResponse>
 } 

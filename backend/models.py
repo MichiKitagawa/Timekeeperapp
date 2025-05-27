@@ -3,7 +3,7 @@ Timekeeper Backend Models
 APIリクエスト・レスポンス用のPydanticモデル
 """
 from pydantic import BaseModel, Field
-from typing import Optional
+from typing import Optional, Literal
 from datetime import date
 
 
@@ -34,4 +34,15 @@ class UnlockDaypassResponse(BaseModel):
 class ErrorResponse(BaseModel):
     """エラーレスポンス"""
     error: str = Field(..., description="エラーコード")
-    message: str = Field(..., description="エラーメッセージ") 
+    message: str = Field(..., description="エラーメッセージ")
+
+
+# Stripe Checkoutセッション作成API用のモデルを追加
+class CreateCheckoutSessionRequest(BaseModel):
+    device_id: str = Field(..., description="デバイスID")
+    product_type: Literal["license", "daypass"] = Field(..., description="購入する商品種別 (license または daypass)")
+    unlock_count: Optional[int] = Field(None, description="現在のアンロック回数 (デイパス購入時、価格計算に利用)") # デイパス価格変動のため追加
+
+
+class CreateCheckoutSessionResponse(BaseModel):
+    checkout_url: str = Field(..., description="Stripe CheckoutページのURL") 

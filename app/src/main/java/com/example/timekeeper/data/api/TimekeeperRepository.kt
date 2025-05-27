@@ -46,9 +46,9 @@ class TimekeeperRepository(
     suspend fun unlockDaypass(
         deviceId: String,
         purchaseToken: String
-    ): ApiResponse<DaypassUnlockResponse> = withContext(Dispatchers.IO) {
+    ): ApiResponse<UnlockDaypassResponse> = withContext(Dispatchers.IO) {
         try {
-            val request = DaypassUnlockRequest(
+            val request = UnlockDaypassRequest(
                 device_id = deviceId,
                 purchase_token = purchaseToken
             )
