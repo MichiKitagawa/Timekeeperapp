@@ -84,7 +84,7 @@ class TimekeeperApiIntegrationTest {
         // Given - 正常なデイパス購入レスポンスを設定
         val deviceId = "test-device-456"
         val purchaseToken = "cs_test_daypass_token"
-        val expectedResponse = DaypassUnlockResponse(
+        val expectedResponse = UnlockDaypassResponse(
             status = "ok",
             unlock_count = 3,
             last_unlock_date = "2025-01-15"
@@ -116,7 +116,7 @@ class TimekeeperApiIntegrationTest {
         // リクエストボディを検証
         val requestBody = Gson().fromJson(
             recordedRequest.body.readUtf8(),
-            DaypassUnlockRequest::class.java
+            UnlockDaypassRequest::class.java
         )
         assertThat(requestBody.device_id).isEqualTo(deviceId)
         assertThat(requestBody.purchase_token).isEqualTo(purchaseToken)
@@ -166,7 +166,7 @@ class TimekeeperApiIntegrationTest {
         mockWebServer.enqueue(
             MockResponse()
                 .setResponseCode(200)
-                .setBody(Gson().toJson(DaypassUnlockResponse(
+                .setBody(Gson().toJson(UnlockDaypassResponse(
                     status = "ok",
                     unlock_count = 1,
                     last_unlock_date = "2025-01-15"

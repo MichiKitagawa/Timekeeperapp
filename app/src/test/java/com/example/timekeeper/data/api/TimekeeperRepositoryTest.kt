@@ -130,7 +130,7 @@ class TimekeeperRepositoryTest {
         // Given
         val deviceId = "test-device-id"
         val purchaseToken = "test-purchase-token"
-        val expectedResponse = DaypassUnlockResponse(
+        val expectedResponse = UnlockDaypassResponse(
             status = "ok",
             unlock_count = 4,
             last_unlock_date = "2025-05-25"
@@ -158,7 +158,7 @@ class TimekeeperRepositoryTest {
         assertThat(request.path).isEqualTo("/unlock/daypass")
         assertThat(request.method).isEqualTo("POST")
         
-        val requestBody = Gson().fromJson(request.body.readUtf8(), DaypassUnlockRequest::class.java)
+        val requestBody = Gson().fromJson(request.body.readUtf8(), UnlockDaypassRequest::class.java)
         assertThat(requestBody.device_id).isEqualTo(deviceId)
         assertThat(requestBody.purchase_token).isEqualTo(purchaseToken)
     }

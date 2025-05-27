@@ -53,6 +53,14 @@ android {
         disable.add("PropertyEscape")
         disable.add("ViewModelConstructorInComposable")
     }
+    
+    packaging {
+        resources {
+            excludes += "/META-INF/{AL2.0,LGPL2.1}"
+            excludes += "/META-INF/LICENSE.md"
+            excludes += "/META-INF/LICENSE-notice.md"
+        }
+    }
 }
 
 dependencies {
@@ -103,6 +111,10 @@ dependencies {
 
     // Unit Testing
     testImplementation(libs.junit) // junit:junit:4.13.2
+    
+    // MockK for mocking
+    testImplementation("io.mockk:mockk:1.13.8")
+    androidTestImplementation("io.mockk:mockk-android:1.13.8")
 
     // --- テスト用ライブラリを以下で統一 ---
 
@@ -132,11 +144,11 @@ dependencies {
     debugImplementation(libs.androidx.ui.test.manifest)
 
     // Hilt
-    implementation("com.google.dagger:hilt-android:2.48")
-    kapt("com.google.dagger:hilt-compiler:2.48")
+    implementation("com.google.dagger:hilt-android:2.51")
+    kapt("com.google.dagger:hilt-compiler:2.51")
     implementation("androidx.hilt:hilt-navigation-compose:1.2.0") // ViewModelをComposeで利用する場合
 
     // Hilt Testing
-    androidTestImplementation("com.google.dagger:hilt-android-testing:2.48")
-    kaptAndroidTest("com.google.dagger:hilt-compiler:2.48")
+    androidTestImplementation("com.google.dagger:hilt-android-testing:2.51")
+    kaptAndroidTest("com.google.dagger:hilt-compiler:2.51")
 }
