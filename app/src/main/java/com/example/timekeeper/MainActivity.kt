@@ -78,6 +78,11 @@ class MainActivity : ComponentActivity() {
                     when (val state = paymentUiState) {
                         is com.example.timekeeper.viewmodel.PaymentUiState.Success -> {
                             Toast.makeText(context, state.message, Toast.LENGTH_LONG).show()
+                            if (state.message.contains("license")) {
+                                navController.navigate(com.example.timekeeper.ui.navigation.TimekeeperRoutes.MONITORING_SETUP) {
+                                    popUpTo(com.example.timekeeper.ui.navigation.TimekeeperRoutes.LICENSE_PURCHASE) { inclusive = true }
+                                }
+                            }
                         }
                         is com.example.timekeeper.viewmodel.PaymentUiState.Error -> {
                             Toast.makeText(context, state.message, Toast.LENGTH_LONG).show()

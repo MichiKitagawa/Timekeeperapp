@@ -87,6 +87,7 @@ fun StripeCheckoutScreen(
     onPaymentCancelled: () -> Unit
 ) {
     var isLoading by remember { mutableStateOf(true) }
+    var paymentProcessed by remember { mutableStateOf(false) }
     val context = LocalContext.current
 
     Column(
@@ -124,11 +125,39 @@ fun StripeCheckoutScreen(
                                 super.onPageStarted(view, url, favicon)
                                 Log.d("StripeCheckoutActivity", "Page started loading: $url")
                                 isLoading = true
+                                
+                                // テスト用モックURLの場合は自動的に成功処理（重複防止）
+                                if (url?.contains("test_session_mock") == true && !paymentProcessed) {
+                                    Log.i("StripeCheckoutActivity", "Mock URL detected, simulating successful payment")
+                                    paymentProcessed = true
+                                    // 少し遅延を入れてリアルな感じにする
+                                    view?.postDelayed({
+                                        val mockSessionId = "test_session_${System.currentTimeMillis()}"
+                                        onPaymentComplete(mockSessionId, "license")
+                                    }, 2000) // 2秒後に成功処理
+                                    return
+                                }
                             }
 
                             override fun onPageFinished(view: WebView?, url: String?) {
                                 super.onPageFinished(view, url)
                                 Log.d("StripeCheckoutActivity", "Page finished loading: $url")
+                                isLoading = false
+                            }
+
+                            override fun onReceivedError(view: WebView?, errorCode: Int, description: String?, failingUrl: String?) {
+                                super.onReceivedError(view, errorCode, description, failingUrl)
+                                Log.e("StripeCheckoutActivity", "WebView error: $errorCode - $description for URL: $failingUrl")
+                                
+                                // モックURLでエラーが発生した場合は成功処理を実行（重複防止）
+                                if (failingUrl?.contains("test_session_mock") == true && !paymentProcessed) {
+                                    Log.i("StripeCheckoutActivity", "Mock URL error detected, simulating successful payment")
+                                    paymentProcessed = true
+                                    val mockSessionId = "test_session_${System.currentTimeMillis()}"
+                                    onPaymentComplete(mockSessionId, "license")
+                                    return
+                                }
+                                
                                 isLoading = false
                             }
 
