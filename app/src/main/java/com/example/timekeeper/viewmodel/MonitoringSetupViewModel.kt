@@ -4,6 +4,7 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.timekeeper.data.MonitoredAppRepository
+import com.example.timekeeper.data.AppUsageRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -11,7 +12,8 @@ import javax.inject.Inject
 
 @HiltViewModel
 class MonitoringSetupViewModel @Inject constructor(
-    private val monitoredAppRepository: MonitoredAppRepository
+    private val monitoredAppRepository: MonitoredAppRepository,
+    private val appUsageRepository: AppUsageRepository
 ) : ViewModel() {
 
     companion object {
@@ -39,7 +41,15 @@ class MonitoringSetupViewModel @Inject constructor(
      */
     fun addMonitoredApp(packageName: String, initialLimit: Int, targetLimit: Int): Boolean {
         Log.d(TAG, "Adding monitored app: $packageName")
-        return monitoredAppRepository.addOrUpdateMonitoredApp(packageName, initialLimit, targetLimit)
+        val success = monitoredAppRepository.addOrUpdateMonitoredApp(packageName, initialLimit, targetLimit)
+        
+        if (success) {
+            // アプリ追加成功時に使用時間をリセット
+            Log.d(TAG, "Resetting today usage for newly added app: $packageName")
+            appUsageRepository.resetTodayUsage(packageName)
+        }
+        
+        return success
     }
 
     /**

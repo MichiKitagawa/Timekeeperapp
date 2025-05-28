@@ -67,10 +67,6 @@ fun TimekeeperNavigation(
         // P03: ダッシュボード
         composable(TimekeeperRoutes.DASHBOARD) {
             DashboardScreen(
-                onAppLimitExceeded = { appName ->
-                    // アプリの制限時間に達した場合、ロック画面へ遷移
-                    navController.navigate("${TimekeeperRoutes.LOCK_SCREEN}/$appName")
-                },
                 navController = navController
             )
         }

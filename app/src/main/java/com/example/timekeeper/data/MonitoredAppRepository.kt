@@ -13,7 +13,7 @@ import javax.inject.Singleton
 class MonitoredAppRepository @Inject constructor(
     private val context: Context
 ) {
-    private val prefs: SharedPreferences = context.getSharedPreferences("monitored_apps", Context.MODE_PRIVATE)
+    private val prefs: SharedPreferences = context.getSharedPreferences("app_usage", Context.MODE_PRIVATE)
     
     private val _monitoredApps = MutableStateFlow<List<MonitoredApp>>(emptyList())
     val monitoredApps: StateFlow<List<MonitoredApp>> = _monitoredApps
@@ -51,11 +51,16 @@ class MonitoredAppRepository @Inject constructor(
     ): Boolean {
         // バリデーション: target_limit < initial_limit
         if (targetLimitMinutes >= initialLimitMinutes) {
+            android.util.Log.w("MonitoredAppRepository", 
+                "Invalid limits: target=$targetLimitMinutes >= initial=$initialLimitMinutes")
             return false
         }
         
         val monitoredApps = prefs.getStringSet("monitored_apps", emptySet())?.toMutableSet() ?: mutableSetOf()
         monitoredApps.add(packageName)
+        
+        android.util.Log.d("MonitoredAppRepository", 
+            "Adding app $packageName: initial=$initialLimitMinutes, target=$targetLimitMinutes, current=$initialLimitMinutes")
         
         prefs.edit()
             .putStringSet("monitored_apps", monitoredApps)
@@ -63,6 +68,9 @@ class MonitoredAppRepository @Inject constructor(
             .putInt("${packageName}_target_limit", targetLimitMinutes)
             .putInt("${packageName}_current_limit", initialLimitMinutes) // 初期値は initial_limit
             .apply()
+        
+        android.util.Log.d("MonitoredAppRepository", 
+            "App $packageName saved successfully")
         
         loadMonitoredApps()
         return true
@@ -166,5 +174,15 @@ class MonitoredAppRepository @Inject constructor(
         android.util.Log.d("MonitoredAppRepository", "Setting ${apps.size} apps to StateFlow")
         _installedApps.value = apps
         android.util.Log.d("MonitoredAppRepository", "StateFlow updated, current value size: ${_installedApps.value.size}")
+    }
+    
+    /**
+     * 全ての監視対象アプリデータをクリア（デバッグ用）
+     */
+    fun clearAllData() {
+        android.util.Log.d("MonitoredAppRepository", "Clearing all monitored app data")
+        prefs.edit().clear().apply()
+        _monitoredApps.value = emptyList()
+        android.util.Log.d("MonitoredAppRepository", "All data cleared")
     }
 } 
