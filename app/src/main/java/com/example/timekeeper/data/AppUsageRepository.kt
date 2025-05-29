@@ -57,22 +57,24 @@ class AppUsageRepository @Inject constructor(
         
         val today = dateFormat.format(Date())
         val usageKey = "${packageName}_usage_$today"
-        val limitKey = "${packageName}_current_limit"
+        
+        // MonitoredAppRepositoryのSharedPreferencesから制限値を取得
+        val monitoredAppPrefs = context.getSharedPreferences("monitored_apps", Context.MODE_PRIVATE)
+        val currentLimit = monitoredAppPrefs.getInt("${packageName}_current_limit", -1)
         
         val todayUsage = prefs.getInt(usageKey, 0)
-        val currentLimit = prefs.getInt(limitKey, -1)
         
         // 制限が設定されていない場合（-1）は制限なし
         if (currentLimit == -1) {
             android.util.Log.d("AppUsageRepository", 
-                "No limit set for monitored app $packageName")
+                "No limit set for monitored app $packageName in monitored_apps prefs")
             return false
         }
         
         val isExceeded = todayUsage >= currentLimit
         
         android.util.Log.d("AppUsageRepository", 
-            "Usage check for $packageName: usage=$todayUsage, limit=$currentLimit, exceeded=$isExceeded")
+            "Usage check for $packageName: usage=$todayUsage, limit=$currentLimit, exceeded=$isExceeded (from monitored_apps prefs)")
         
         return isExceeded
     }
@@ -117,17 +119,19 @@ class AppUsageRepository @Inject constructor(
             return Int.MAX_VALUE
         }
         
-        val limit = prefs.getInt("${packageName}_current_limit", -1)
+        // MonitoredAppRepositoryのSharedPreferencesから制限値を取得
+        val monitoredAppPrefs = context.getSharedPreferences("monitored_apps", Context.MODE_PRIVATE)
+        val limit = monitoredAppPrefs.getInt("${packageName}_current_limit", -1)
         
         // 監視対象として設定されているが制限が設定されていない場合
         if (limit == -1) {
             android.util.Log.w("AppUsageRepository", 
-                "Monitored app $packageName has no limit set, returning unlimited")
+                "Monitored app $packageName has no limit set in monitored_apps prefs, returning unlimited")
             return Int.MAX_VALUE
         }
         
         android.util.Log.d("AppUsageRepository", 
-            "Current limit for $packageName: $limit minutes")
+            "Current limit for $packageName: $limit minutes (from monitored_apps prefs)")
         return limit
     }
     
@@ -282,14 +286,17 @@ class AppUsageRepository @Inject constructor(
         val monitoredApps = getMonitoredApps()
         val usageMap = mutableMapOf<String, AppUsageData>()
         
+        // MonitoredAppRepositoryのSharedPreferencesを取得
+        val monitoredAppPrefs = context.getSharedPreferences("monitored_apps", Context.MODE_PRIVATE)
+        
         android.util.Log.d("AppUsageRepository", "loadUsageData called - today: $today, monitored apps: ${monitoredApps.size}")
         
         monitoredApps.forEach { packageName ->
             val todayUsage = getTodayUsage(packageName)
-            val currentLimit = getCurrentLimit(packageName)
+            val currentLimit = monitoredAppPrefs.getInt("${packageName}_current_limit", Int.MAX_VALUE)
             val lastUsed = prefs.getString("${packageName}_last_used", today) ?: today
             
-            android.util.Log.d("AppUsageRepository", "Loading data for $packageName: usage=$todayUsage, limit=$currentLimit")
+            android.util.Log.d("AppUsageRepository", "Loading data for $packageName: usage=$todayUsage, limit=$currentLimit (from monitored_apps prefs)")
             
             usageMap[packageName] = AppUsageData(
                 packageName = packageName,

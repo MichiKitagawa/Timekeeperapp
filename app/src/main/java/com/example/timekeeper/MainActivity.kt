@@ -183,32 +183,63 @@ class MainActivity : ComponentActivity() {
                                 }
                             } else if (state.message.contains("daypass")) {
                                 // デイパス購入成功時の処理
-                                Log.i("MainActivity", "Day pass purchase successful, applying unlock")
+                                Log.i("MainActivity", "🎉 Day pass purchase successful, applying unlock")
                                 
                                 // 全ての監視対象アプリにデイパスを適用
+                                Log.i("MainActivity", "🎉 Calling appUsageRepository.purchaseDayPassForAllApps()")
                                 appUsageRepository.purchaseDayPassForAllApps()
+                                Log.i("MainActivity", "🎉 appUsageRepository.purchaseDayPassForAllApps() completed")
                                 
-                                // アクセシビリティサービスにブロック解除を通知
-                                try {
-                                    val serviceClass = Class.forName("com.example.timekeeper.service.MyAccessibilityService")
-                                    val getInstanceMethod = serviceClass.getMethod("getInstance")
-                                    val serviceInstance = getInstanceMethod.invoke(null)
-                                    
-                                    if (serviceInstance != null) {
-                                        val onDayPassPurchasedMethod = serviceClass.getMethod("onDayPassPurchasedForAllApps")
-                                        onDayPassPurchasedMethod.invoke(serviceInstance)
-                                        Log.i("MainActivity", "Successfully notified accessibility service about day pass purchase")
-                                    } else {
-                                        Log.w("MainActivity", "Accessibility service instance not available")
-                                    }
-                                } catch (e: Exception) {
-                                    Log.e("MainActivity", "Failed to notify accessibility service", e)
+                                // デバッグ：デイパス状態を確認
+                                val monitoredApps = monitoredAppRepository.monitoredApps.value
+                                Log.i("MainActivity", "🎉 Verifying day pass state for ${monitoredApps.size} monitored apps")
+                                monitoredApps.forEach { app ->
+                                    val hasDayPass = appUsageRepository.hasDayPass(app.packageName)
+                                    val isExceeded = appUsageRepository.isUsageExceededWithDayPass(app.packageName)
+                                    Log.i("MainActivity", "🎉 App ${app.packageName}: dayPass=$hasDayPass, exceeded=$isExceeded")
                                 }
                                 
+                                // アクセシビリティサービスにブロック解除を通知
+                                Log.i("MainActivity", "🎉 Starting accessibility service notification process")
+                                try {
+                                    Log.d("MainActivity", "🎉 Attempting to get MyAccessibilityService class")
+                                    val serviceClass = Class.forName("com.example.timekeeper.service.MyAccessibilityService")
+                                    Log.d("MainActivity", "🎉 Got service class: $serviceClass")
+                                    
+                                    Log.d("MainActivity", "🎉 Attempting to get getInstance method")
+                                    val getInstanceMethod = serviceClass.getMethod("getInstance")
+                                    Log.d("MainActivity", "🎉 Got getInstance method: $getInstanceMethod")
+                                    
+                                    Log.d("MainActivity", "🎉 Calling getInstance method")
+                                    val serviceInstance = getInstanceMethod.invoke(null)
+                                    Log.d("MainActivity", "🎉 Got service instance: $serviceInstance")
+                                    
+                                    if (serviceInstance != null) {
+                                        Log.d("MainActivity", "🎉 Service instance is not null, getting onDayPassPurchasedForAllApps method")
+                                        val onDayPassPurchasedMethod = serviceClass.getMethod("onDayPassPurchasedForAllApps")
+                                        Log.d("MainActivity", "🎉 Got method: $onDayPassPurchasedMethod")
+                                        
+                                        Log.i("MainActivity", "🎉 Calling onDayPassPurchasedForAllApps on service instance")
+                                        onDayPassPurchasedMethod.invoke(serviceInstance)
+                                        Log.i("MainActivity", "🎉 Successfully notified accessibility service about day pass purchase")
+                                    } else {
+                                        Log.w("MainActivity", "🚨 Accessibility service instance is null - service may not be running")
+                                        Log.w("MainActivity", "🚨 This means the user needs to restart the app or re-enable accessibility service")
+                                    }
+                                } catch (e: ClassNotFoundException) {
+                                    Log.e("MainActivity", "🚨 Failed to find MyAccessibilityService class", e)
+                                } catch (e: NoSuchMethodException) {
+                                    Log.e("MainActivity", "🚨 Failed to find method in accessibility service", e)
+                                } catch (e: Exception) {
+                                    Log.e("MainActivity", "🚨 Failed to notify accessibility service", e)
+                                }
+                                
+                                Log.i("MainActivity", "🎉 Navigating back to dashboard")
                                 // ダッシュボードに戻る
                                 navController.navigate(com.example.timekeeper.ui.navigation.TimekeeperRoutes.DASHBOARD) {
                                     popUpTo(com.example.timekeeper.ui.navigation.TimekeeperRoutes.DAY_PASS_PURCHASE) { inclusive = true }
                                 }
+                                Log.i("MainActivity", "🎉 Day pass purchase processing completed")
                             }
                         }
                         is com.example.timekeeper.viewmodel.PaymentUiState.Error -> {

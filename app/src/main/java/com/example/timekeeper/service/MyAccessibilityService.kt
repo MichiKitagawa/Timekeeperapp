@@ -44,6 +44,25 @@ class MyAccessibilityService : AccessibilityService() {
         instance = this
         Log.i(TAG, "🔧 Accessibility service connected")
         
+        // デバッグ用：一時的にデータをクリア（キャッシュの影響を排除）
+        val debugClearData = true // テスト用にtrueに設定
+        if (debugClearData) {
+            Log.w(TAG, "🔧 DEBUG: Clearing all cached data to test fresh state")
+            val monitoredAppPrefs = applicationContext.getSharedPreferences("monitored_apps", Context.MODE_PRIVATE)
+            val appUsagePrefs = applicationContext.getSharedPreferences("app_usage", Context.MODE_PRIVATE)
+            
+            Log.w(TAG, "🔧 DEBUG: Before clear - monitored_apps keys: ${monitoredAppPrefs.all.keys}")
+            Log.w(TAG, "🔧 DEBUG: Before clear - app_usage keys: ${appUsagePrefs.all.keys}")
+            
+            // データをクリアはしないが、現在の状態をログに出力
+            monitoredAppPrefs.all.forEach { (key, value) ->
+                Log.d(TAG, "🔧 monitored_apps: $key = $value")
+            }
+            appUsagePrefs.all.forEach { (key, value) ->
+                Log.d(TAG, "🔧 app_usage: $key = $value")
+            }
+        }
+        
         val info = AccessibilityServiceInfo()
         info.eventTypes = AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
         info.feedbackType = AccessibilityServiceInfo.FEEDBACK_GENERIC
@@ -58,27 +77,92 @@ class MyAccessibilityService : AccessibilityService() {
         // デバッグ用：監視対象アプリを確認
         val monitoredApps = monitoredAppRepository.monitoredApps.value
         Log.i(TAG, "🔧 Service connected - Monitored apps: ${monitoredApps.size}")
+        
+        // デバッグ用：SharedPreferencesの詳細状態を確認
+        val monitoredAppPrefs = applicationContext.getSharedPreferences("monitored_apps", Context.MODE_PRIVATE)
+        val appUsagePrefs = applicationContext.getSharedPreferences("app_usage", Context.MODE_PRIVATE)
+        
+        Log.i(TAG, "🔧 === SharedPreferences Debug Info ===")
+        Log.i(TAG, "🔧 monitored_apps keys: ${monitoredAppPrefs.all.keys}")
+        Log.i(TAG, "🔧 app_usage keys: ${appUsagePrefs.all.keys}")
+        
         monitoredApps.forEach { app ->
             Log.i(TAG, "🔧 Monitored app: ${app.appName} (${app.packageName})")
+            
+            // MonitoredAppRepositoryからの制限値
+            val initialLimit = monitoredAppPrefs.getInt("${app.packageName}_initial_limit", -1)
+            val targetLimit = monitoredAppPrefs.getInt("${app.packageName}_target_limit", -1)
+            val currentLimitFromMonitored = monitoredAppPrefs.getInt("${app.packageName}_current_limit", -1)
+            
+            Log.i(TAG, "🔧 MonitoredApp limits for ${app.packageName}: initial=$initialLimit, target=$targetLimit, current=$currentLimitFromMonitored")
+            
+            // 各アプリの詳細情報をログ出力
+            val todayUsage = appUsageRepository.getTodayUsage(app.packageName)
+            val currentLimit = appUsageRepository.getCurrentLimit(app.packageName)
+            val hasDayPass = appUsageRepository.hasDayPass(app.packageName)
+            val isExceeded = appUsageRepository.isUsageExceededWithDayPass(app.packageName)
+            
+            Log.i(TAG, "🔧 App ${app.packageName}: usage=$todayUsage, limit=$currentLimit, dayPass=$hasDayPass, exceeded=$isExceeded")
             
             // 既に制限超過しているアプリをブロック
             if (appUsageRepository.isUsageExceededWithDayPass(app.packageName)) {
                 blockApp(app.packageName)
                 Log.w(TAG, "🔧 Pre-blocked app due to usage exceeded: ${app.packageName}")
+            } else {
+                Log.d(TAG, "🔧 App ${app.packageName} within limits, not blocking")
             }
         }
         
+        Log.i(TAG, "🔧 Final blocked apps list: ${blockedApps.toList()}")
         Log.i(TAG, "🔧 Accessibility service initialization completed")
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if (event?.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
+            // デイパス状態をチェック - いずれかの監視対象アプリでデイパスが有効なら監視を停止
+            val monitoredApps = monitoredAppRepository.monitoredApps.value
+            val hasAnyDayPass = monitoredApps.any { app -> appUsageRepository.hasDayPass(app.packageName) }
+            
+            if (hasAnyDayPass) {
+                Log.d(TAG, "🎉 Day Pass is active. Skipping all monitoring and blocking logic.")
+                
+                // 現在のフォアグラウンドアプリは更新するが、監視・ブロック処理は一切行わない
+                val packageName = event.packageName?.toString()
+                if (packageName != null && packageName != currentForegroundApp) {
+                    Log.i(TAG, "📱 Foreground app changed (Day Pass Active): $packageName")
+                    currentForegroundApp = packageName
+                    stopUsageTracking() // 既存のトラッキングがあれば停止
+                }
+                return // 監視・ブロック処理を完全にスキップ
+            }
+
             val packageName = event.packageName?.toString()
             Log.d(TAG, "🔍 Window state changed - Package: $packageName, Current: $currentForegroundApp")
+
+            // デバッグ: 現在のブロック状態をログ出力
+            Log.d(TAG, "🔍 Current blocked apps: ${blockedApps.toList()}")
             
+            // まず、新しいウィンドウがブロック対象アプリかどうかを確認
+            if (packageName != null && blockedApps.contains(packageName)) {
+                Log.w(TAG, "🚫 Blocked app $packageName detected as new window, immediately blocking access")
+                
+                // デバッグ: 制限状態を再確認
+                val todayUsage = appUsageRepository.getTodayUsage(packageName)
+                val currentLimit = appUsageRepository.getCurrentLimit(packageName)
+                val isExceeded = appUsageRepository.isUsageExceededWithDayPass(packageName)
+                val hasDayPass = appUsageRepository.hasDayPass(packageName)
+                
+                Log.w(TAG, "🔍 Debug blocked app $packageName: usage=$todayUsage, limit=$currentLimit, exceeded=$isExceeded, dayPass=$hasDayPass")
+                
+                blockAppAccess(packageName)
+                currentForegroundApp = packageName // currentForegroundApp を更新
+                stopUsageTracking() // 念のためトラッキングも停止
+                return
+            }
+
             if (packageName != null && packageName != currentForegroundApp) {
                 Log.i(TAG, "📱 Foreground app changed: $packageName")
-                
+
                 // Timekeeperアプリ自体は監視対象外
                 if (packageName == "com.example.timekeeper") {
                     Log.d(TAG, "⏭️ Timekeeper app detected, skipping monitoring")
@@ -86,50 +170,62 @@ class MyAccessibilityService : AccessibilityService() {
                     stopUsageTracking()
                     return
                 }
-                
+
                 // 前のアプリの使用時間追跡を停止
                 stopUsageTracking()
-                
-                // 制限中のアプリかどうかを最初にチェック
+
+                // 制限中のアプリかどうかをチェック (フォアグラウンド変更時)
+                // このチェックは上記の最初のチェックと重複する可能性があるが、currentForegroundAppの更新タイミングによっては必要
                 if (blockedApps.contains(packageName)) {
-                    Log.w(TAG, "🚫 Blocked app $packageName detected, immediately blocking access")
+                    Log.w(TAG, "🚫 Blocked app $packageName detected on foreground change, blocking access")
+                    
+                    // デバッグ: 制限状態を再確認
+                    val todayUsage = appUsageRepository.getTodayUsage(packageName)
+                    val currentLimit = appUsageRepository.getCurrentLimit(packageName)
+                    val isExceeded = appUsageRepository.isUsageExceededWithDayPass(packageName)
+                    val hasDayPass = appUsageRepository.hasDayPass(packageName)
+                    
+                    Log.w(TAG, "🔍 Debug blocked app $packageName: usage=$todayUsage, limit=$currentLimit, exceeded=$isExceeded, dayPass=$hasDayPass")
+                    
                     blockAppAccess(packageName)
+                    currentForegroundApp = packageName // currentForegroundApp を更新
                     return
                 }
-                
+
                 // 新しいアプリが監視対象かチェック
                 val isMonitored = monitoredAppRepository.isAppMonitored(packageName)
                 Log.d(TAG, "🔍 Checking if $packageName is monitored: $isMonitored")
-                
+
                 if (isMonitored) {
                     Log.i(TAG, "✅ Monitored app detected: $packageName")
-                    
-                    // 今日の使用時間と制限を確認
+
                     val todayUsage = appUsageRepository.getTodayUsage(packageName)
                     val currentLimit = appUsageRepository.getCurrentLimit(packageName)
-                    
-                    Log.i(TAG, "📊 App $packageName: usage=$todayUsage minutes, limit=$currentLimit minutes")
-                    
-                    // 制限が無制限（Int.MAX_VALUE）の場合はスキップ
+                    val hasDayPass = appUsageRepository.hasDayPass(packageName)
+                    val isExceededBasic = appUsageRepository.isUsageExceeded(packageName)
+                    val isExceededWithDayPass = appUsageRepository.isUsageExceededWithDayPass(packageName)
+
+                    Log.i(TAG, "📊 App $packageName: usage=$todayUsage minutes, limit=$currentLimit minutes, dayPass=$hasDayPass")
+                    Log.i(TAG, "📊 App $packageName: exceededBasic=$isExceededBasic, exceededWithDayPass=$isExceededWithDayPass")
+
                     if (currentLimit == Int.MAX_VALUE) {
                         Log.d(TAG, "♾️ App $packageName has unlimited usage, starting tracking")
-                        startUsageTracking(packageName)
-                        return
+                        startUsageTracking(packageName) // currentForegroundApp は startUsageTracking 内で更新される
+                        return // return を追加
                     }
-                    
-                    // 使用時間が制限を超えているかチェック
+
                     if (appUsageRepository.isUsageExceededWithDayPass(packageName)) {
                         Log.w(TAG, "⏰ Usage limit reached for $packageName ($todayUsage >= $currentLimit)")
+                        Log.w(TAG, "🔍 Adding $packageName to blocked apps list and blocking access")
                         blockApp(packageName)
                         blockAppAccess(packageName)
+                        currentForegroundApp = packageName // currentForegroundApp を更新
                     } else {
                         Log.i(TAG, "✅ Usage within limit for $packageName ($todayUsage < $currentLimit), starting tracking")
-                        // 制限内の場合は使用時間追跡を開始
-                        startUsageTracking(packageName)
+                        startUsageTracking(packageName) // currentForegroundApp は startUsageTracking 内で更新される
                     }
                 } else {
                     Log.d(TAG, "⏭️ Non-monitored app: $packageName")
-                    // 監視対象外のアプリの場合
                     currentForegroundApp = packageName
                 }
             }
@@ -204,39 +300,68 @@ class MyAccessibilityService : AccessibilityService() {
      * 制限超過アプリへのアクセスを完全にブロック
      */
     private fun blockAppAccess(packageName: String) {
-        Log.w(TAG, "Blocking access to $packageName - forcing return to home screen")
+        Log.w(TAG, "🚫 blockAppAccess called for $packageName - forcing return to home screen")
+        
+        // デバッグ: 現在の状態を確認
+        Log.d(TAG, "🔍 Current foreground app: $currentForegroundApp")
+        Log.d(TAG, "🔍 Blocked apps before: ${blockedApps.toList()}")
         
         // 即座にホーム画面に戻す
+        Log.d(TAG, "🏠 Calling goToHomeScreen()...")
         goToHomeScreen()
+        Log.d(TAG, "🏠 goToHomeScreen() completed")
         
         // 継続的な監視を開始（ユーザーがアプリに戻ろうとするのを防ぐ）
+        Log.d(TAG, "🔄 Starting continuous blocking for $packageName...")
         startContinuousBlocking(packageName)
+        Log.d(TAG, "🔄 startContinuousBlocking() completed")
     }
     
     /**
      * 継続的なブロック監視を開始
      */
     private fun startContinuousBlocking(packageName: String) {
+        Log.d(TAG, "🔄 startContinuousBlocking called for $packageName")
+        
         // 既存の継続ブロックがあれば停止
         stopContinuousBlocking()
         
         continuousBlockingRunnable = object : Runnable {
             override fun run() {
+                // デイパス状態をチェック - いずれかの監視対象アプリでデイパスが有効なら継続ブロックを停止
+                val monitoredApps = monitoredAppRepository.monitoredApps.value
+                val hasAnyDayPass = monitoredApps.any { app -> appUsageRepository.hasDayPass(app.packageName) }
+                
+                if (hasAnyDayPass) {
+                    Log.i(TAG, "🎉 Day Pass detected during continuous blocking. Stopping continuous blocking for $packageName.")
+                    // ブロックリストからアプリを削除
+                    unblockApp(packageName)
+                    // 継続的ブロックを停止（このrunnableを再スケジュールしない）
+                    return
+                }
+
+                Log.d(TAG, "🔄 Continuous blocking check for $packageName - current foreground: $currentForegroundApp")
+                
                 // ブロック対象アプリがフォアグラウンドにいるかチェック
                 if (currentForegroundApp == packageName && blockedApps.contains(packageName)) {
-                    Log.w(TAG, "Blocked app $packageName still in foreground, forcing home screen")
+                    Log.w(TAG, "🚫 Blocked app $packageName still in foreground, forcing home screen")
                     goToHomeScreen()
+                } else {
+                    Log.d(TAG, "🔄 Blocked app $packageName not in foreground (current: $currentForegroundApp) or not in blocked list (${blockedApps.contains(packageName)})")
                 }
                 
                 // ブロック状態が続く限り継続監視
                 if (blockedApps.contains(packageName)) {
+                    Log.d(TAG, "🔄 Scheduling next continuous blocking check for $packageName in 1.5 seconds")
                     handler.postDelayed(this, 1500) // 1.5秒間隔で監視
+                } else {
+                    Log.d(TAG, "🔄 App $packageName no longer in blocked list, stopping continuous blocking")
                 }
             }
         }
         
         handler.postDelayed(continuousBlockingRunnable!!, 1500)
-        Log.d(TAG, "Started continuous blocking for $packageName")
+        Log.d(TAG, "🔄 Started continuous blocking for $packageName")
     }
     
     /**
@@ -254,14 +379,21 @@ class MyAccessibilityService : AccessibilityService() {
      * ホーム画面に戻す
      */
     private fun goToHomeScreen() {
+        Log.d(TAG, "🏠 goToHomeScreen() called")
         try {
             val homeIntent = Intent(Intent.ACTION_MAIN)
             homeIntent.addCategory(Intent.CATEGORY_HOME)
-            homeIntent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            homeIntent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP // FLAG_ACTIVITY_CLEAR_TOP を追加
+            
+            Log.d(TAG, "🏠 Starting home screen activity with intent: $homeIntent")
             startActivity(homeIntent)
-            Log.d(TAG, "Navigated to home screen")
+            Log.d(TAG, "🏠 Successfully navigated to home screen")
+        } catch (e: SecurityException) { // より具体的な例外をキャッチ
+            Log.e(TAG, "🚨 Failed to navigate to home screen due to SecurityException. This might be due to restrictions on starting activities from background on some Android versions.", e)
+            // TODO: ユーザーへの通知など、代替手段を検討
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to navigate to home screen", e)
+            Log.e(TAG, "🚨 Failed to navigate to home screen due to generic Exception", e)
+            // TODO: ユーザーへの通知など、代替手段を検討
         }
     }
 
@@ -283,16 +415,30 @@ class MyAccessibilityService : AccessibilityService() {
      * 全ての監視対象アプリのブロックを解除
      */
     fun onDayPassPurchasedForAllApps() {
+        Log.i(TAG, "🎉 onDayPassPurchasedForAllApps called - starting block removal process")
+        
         val monitoredApps = monitoredAppRepository.monitoredApps.value
+        Log.i(TAG, "🎉 Monitored apps count: ${monitoredApps.size}")
+        Log.i(TAG, "🎉 Current blocked apps before removal: ${blockedApps.toList()}")
+        
         monitoredApps.forEach { app ->
+            val wasBlocked = blockedApps.contains(app.packageName)
             unblockApp(app.packageName)
-            Log.i(TAG, "Day pass purchased, unblocked app: ${app.packageName}")
+            Log.i(TAG, "🎉 Day pass purchased, unblocked app: ${app.packageName} (was blocked: $wasBlocked)")
+            
+            // デバッグ：デイパス状態を確認
+            val hasDayPass = appUsageRepository.hasDayPass(app.packageName)
+            val isExceeded = appUsageRepository.isUsageExceededWithDayPass(app.packageName)
+            Log.i(TAG, "🎉 App ${app.packageName}: dayPass=$hasDayPass, exceeded=$isExceeded")
         }
+        
+        Log.i(TAG, "🎉 Blocked apps after removal: ${blockedApps.toList()}")
         
         // 継続的なブロック監視も停止
         stopContinuousBlocking()
+        Log.i(TAG, "🎉 Stopped continuous blocking")
         
-        Log.i(TAG, "Day pass purchased for all ${monitoredApps.size} monitored apps")
+        Log.i(TAG, "🎉 Day pass purchased for all ${monitoredApps.size} monitored apps")
     }
 
     override fun onInterrupt() {
