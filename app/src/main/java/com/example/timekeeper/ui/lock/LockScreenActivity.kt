@@ -64,16 +64,13 @@ class LockScreenActivity : AppCompatActivity() {
         unlockButton.setOnClickListener {
             Log.i(TAG, "Unlock button clicked for $lockedAppPackage")
             
-            // デイパス購入処理（現在は仮実装）
-            lockedAppPackage?.let { packageName ->
-                // アクセシビリティサービスにブロック解除を通知
-                accessibilityService?.onDayPassPurchased(packageName)
-                Log.i(TAG, "Day pass purchased for $packageName")
+            // デイパス購入画面に遷移
+            val intent = Intent(this, MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NEW_TASK
+                // デイパス購入画面に直接遷移するためのフラグを追加
+                putExtra("navigate_to", "day_pass_purchase")
+                putExtra("locked_app_package", lockedAppPackage)
             }
-            
-            // Timekeeperアプリに戻る
-            val intent = Intent(this, MainActivity::class.java)
-            intent.flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NEW_TASK
             startActivity(intent)
             finish()
         }

@@ -28,10 +28,20 @@ class AppUsageRepository @Inject constructor(
     
     init {
         android.util.Log.d("AppUsageRepository", "AppUsageRepository initialized")
+        
+        // 初期化時に強制制限状態をチェック・クリア
+        checkAndClearForceBlocks()
+        
         loadUsageData()
     }
     
-
+    /**
+     * 初期化時に強制制限状態をチェック・クリア（デバッグ用）
+     */
+    private fun checkAndClearForceBlocks() {
+        // 新しい実装では強制制限は使用しないため、この処理は不要
+        android.util.Log.i("AppUsageRepository", "Force block check skipped - using new security model")
+    }
     
     /**
      * アプリの使用時間が制限を超えているかチェック
@@ -259,7 +269,9 @@ class AppUsageRepository @Inject constructor(
      * 監視対象アプリ一覧を取得
      */
     private fun getMonitoredApps(): Set<String> {
-        return prefs.getStringSet("monitored_apps", emptySet()) ?: emptySet()
+        // MonitoredAppRepository専用のSharedPreferencesから取得
+        val monitoredAppPrefs = context.getSharedPreferences("monitored_apps", Context.MODE_PRIVATE)
+        return monitoredAppPrefs.getStringSet("monitored_apps", emptySet()) ?: emptySet()
     }
     
     /**
@@ -296,8 +308,6 @@ class AppUsageRepository @Inject constructor(
             android.util.Log.d("AppUsageRepository", "StateFlow entry: $packageName = ${data.todayUsageMinutes}/${data.currentLimitMinutes} minutes")
         }
     }
-    
-
     
     /**
      * 全ての使用データをクリア（デバッグ用）

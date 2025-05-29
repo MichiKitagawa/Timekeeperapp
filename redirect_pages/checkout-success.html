@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Payment Success</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script>
+        function getQueryParam(name) {
+            const urlParams = new URLSearchParams(window.location.search);
+            return urlParams.get(name);
+        }
+
+        function redirectToApp() {
+            const sessionId = getQueryParam('session_id');
+            const productType = getQueryParam('product_type');
+            const status = getQueryParam('status');
+
+            if (sessionId && productType && status === 'success') {
+                // アプリのディープリンクスキーマに合わせて変更してください
+                const deepLinkUrl = `app://com.example.timekeeper/checkout-success?session_id=${sessionId}&product_type=${productType}`;
+                document.getElementById('message').innerText = `Payment successful! Redirecting to app: ${deepLinkUrl}`;
+                window.location.href = deepLinkUrl;
+
+                // オプション：リダイレクトに失敗した場合のフォールバックメッセージ
+                setTimeout(() => {
+                    document.getElementById('message').innerText = 'Failed to redirect automatically. Please open the app manually.';
+                }, 3000);
+            } else {
+                document.getElementById('message').innerText = 'Payment successful, but missing session_id or product_type for app redirection.';
+            }
+        }
+
+        // ページ読み込み時にリダイレクトを実行
+        window.onload = redirectToApp;
+    </script>
+</head>
+<body>
+    <h1>Processing your payment...</h1>
+    <p id="message">Please wait.</p>
+</body>
+</html>

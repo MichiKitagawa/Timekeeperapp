@@ -28,6 +28,7 @@ fun DashboardScreen(
 ) {
     // 実際の監視対象アプリデータを取得
     val appUsageInfoList by viewModel.appUsageInfoList.collectAsState()
+    val isAccessibilityServiceEnabled by viewModel.isAccessibilityServiceEnabled.collectAsState()
     
     Column(
         modifier = modifier
@@ -40,6 +41,52 @@ fun DashboardScreen(
             fontWeight = FontWeight.Bold,
             modifier = Modifier.padding(bottom = 16.dp)
         )
+        
+        // アクセシビリティサービス状態の警告表示
+        if (!isAccessibilityServiceEnabled) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 16.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = Color(0xFFFFEBEE) // 薄い赤色
+                )
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp)
+                ) {
+                    Text(
+                        text = "⚠️ セキュリティ警告",
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFFD32F2F) // 赤色
+                    )
+                    Text(
+                        text = "アクセシビリティサービスが無効化されています。\n全ての監視対象アプリが強制制限されています。",
+                        fontSize = 14.sp,
+                        color = Color(0xFFD32F2F),
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
+                    Button(
+                        onClick = { 
+                            // アクセシビリティ設定画面に遷移
+                            try {
+                                val intent = android.content.Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS)
+                                navController.context.startActivity(intent)
+                            } catch (e: Exception) {
+                                android.util.Log.e("DashboardScreen", "Failed to open accessibility settings", e)
+                            }
+                        },
+                        modifier = Modifier.padding(top = 8.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFFD32F2F)
+                        )
+                    ) {
+                        Text("設定を開く", color = Color.White)
+                    }
+                }
+            }
+        }
         
         if (appUsageInfoList.isEmpty()) {
             Column(
@@ -136,23 +183,26 @@ fun AppUsageCard(
                     modifier = Modifier.weight(1f)
                 )
                 
-                if (app.hasDayPass) {
-                    Text(
-                        text = "デイパス有効",
-                        fontSize = 12.sp,
-                        color = Color(0xFF4CAF50),
-                        fontWeight = FontWeight.Bold
-                    )
-                } else {
-                    Button(
-                        onClick = { onDayPassPurchase(app.packageName) },
-                        modifier = Modifier.height(32.dp),
-                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
-                    ) {
+                when {
+                    app.hasDayPass -> {
                         Text(
-                            text = "アンロック",
-                            fontSize = 12.sp
+                            text = "デイパス有効",
+                            fontSize = 12.sp,
+                            color = Color(0xFF4CAF50),
+                            fontWeight = FontWeight.Bold
                         )
+                    }
+                    else -> {
+                        Button(
+                            onClick = { onDayPassPurchase(app.packageName) },
+                            modifier = Modifier.height(32.dp),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+                        ) {
+                            Text(
+                                text = "アンロック",
+                                fontSize = 12.sp
+                            )
+                        }
                     }
                 }
             }
@@ -160,7 +210,10 @@ fun AppUsageCard(
             Spacer(modifier = Modifier.height(8.dp))
             
             Text(
-                text = if (app.hasDayPass) "無制限" else "${app.usedMinutes} / ${app.limitMinutes} 分",
+                text = when {
+                    app.hasDayPass -> "無制限"
+                    else -> "${app.usedMinutes} / ${app.limitMinutes} 分"
+                },
                 fontSize = 14.sp,
                 color = Color.Gray,
                 modifier = Modifier.padding(bottom = 8.dp)

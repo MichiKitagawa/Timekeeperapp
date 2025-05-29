@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Payment Cancelled</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script>
+        function getQueryParam(name) {
+            const urlParams = new URLSearchParams(window.location.search);
+            return urlParams.get(name);
+        }
+
+        function redirectToApp() {
+            const productType = getQueryParam('product_type');
+            const status = getQueryParam('status');
+            const deviceId = getQueryParam('device_id');
+
+            if (productType && status === 'cancel') {
+                // アプリのディープリンクスキーマに合わせて変更してください
+                let deepLinkUrl = `app://com.example.timekeeper/checkout-cancel?product_type=${productType}`;
+                if (deviceId) {
+                    deepLinkUrl += `&device_id=${deviceId}`;
+                }
+                document.getElementById('message').innerText = `Payment cancelled. Redirecting to app: ${deepLinkUrl}`;
+                window.location.href = deepLinkUrl;
+
+                // オプション：リダイレクトに失敗した場合のフォールバックメッセージ
+                setTimeout(() => {
+                    document.getElementById('message').innerText = 'Failed to redirect automatically. Please open the app manually.';
+                }, 3000);
+            } else {
+                document.getElementById('message').innerText = 'Payment cancelled, but missing product_type for app redirection.';
+            }
+        }
+        window.onload = redirectToApp;
+    </script>
+</head>
+<body>
+    <h1>Payment Cancelled</h1>
+    <p id="message">You have cancelled the payment.</p>
+    <p><a href="app://com.example.timekeeper/return">Go back to app (manual link)</a></p>
+</body>
+</html>

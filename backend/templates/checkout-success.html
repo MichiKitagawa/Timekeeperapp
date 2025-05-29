@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Payment Successful</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        body { font-family: sans-serif; display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100vh; margin: 0; text-align: center; padding: 20px; box-sizing: border-box; }
+        .icon { font-size: 48px; color: green; }
+        .message { margin-top: 20px; font-size: 18px; }
+        .redirect-info { margin-top: 10px; font-size: 14px; color: #555; }
+        .loader { border: 4px solid #f3f3f3; border-top: 4px solid #3498db; border-radius: 50%; width: 30px; height: 30px; animation: spin 1s linear infinite; margin-top: 20px; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+    <script>
+        function getQueryParam(param) {
+            const urlParams = new URLSearchParams(window.location.search);
+            return urlParams.get(param);
+        }
+        window.onload = function() {
+            const sessionId = getQueryParam('session_id');
+            const productType = getQueryParam('product_type');
+            const status = getQueryParam('status');
+
+            if (status === 'success' && sessionId && productType) {
+                const appLink = `app://com.example.timekeeper/checkout-success?session_id=${sessionId}&product_type=${productType}`;
+                document.getElementById('redirect-message').innerText = '購入処理が完了しました。アプリに戻っています...';
+                try {
+                    window.location.href = appLink;
+                    // フォールバックタイマー: 3秒後にストアにリダイレクトなど検討
+                    setTimeout(function() {
+                        // ここにアプリストアへのリンクや、アプリが見つからない場合のメッセージ表示などを追加できます。
+                        // document.getElementById('redirect-message').innerText = 'アプリが自動で開かない場合は、手動で起動してください。';
+                    }, 3000);
+                } catch (e) {
+                    console.error("Failed to redirect to app:", e);
+                    document.getElementById('redirect-message').innerText = 'アプリへのリダイレクトに失敗しました。手動でアプリを開いてください。';
+                }
+            } else {
+                document.getElementById('icon').innerText = '⚠️';
+                document.getElementById('icon').style.color = 'orange';
+                document.getElementById('redirect-message').innerText = '決済情報の取得に失敗しました。';
+                document.querySelector('.loader').style.display = 'none';
+            }
+        };
+    </script>
+</head>
+<body>
+    <div id="icon" class="icon">✓</div>
+    <div id="redirect-message" class="message">購入処理が完了しました。アプリに戻っています...</div>
+    <div class="loader"></div>
+    <div class="redirect-info">このページは数秒後に自動的に閉じられます。</div>
+</body>
+</html> 

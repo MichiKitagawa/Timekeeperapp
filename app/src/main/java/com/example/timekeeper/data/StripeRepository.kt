@@ -29,34 +29,36 @@ class StripeRepository(
     }
 
     /**
-     * バックエンドにStripe Checkoutセッションの作成をリクエストし、決済ページのURLを取得します。
+     * Stripe Checkoutセッションを作成し、決済ページのURLを返します。
      */
     suspend fun createCheckoutSession(deviceId: String, productType: String, unlockCount: Int?): String? {
         return withContext(Dispatchers.IO) {
             try {
-                // テスト用のモックレスポンス（ネットワーク接続問題を回避）
-                Log.i(TAG, "Mock: Creating checkout session for device=$deviceId, product=$productType, count=$unlockCount")
+                Log.i(TAG, "Creating Stripe checkout session for device=$deviceId, product=$productType, unlockCount=$unlockCount")
                 
-                // 実際のStripe Checkout URLの代わりにテスト用URLを返す
-                val mockCheckoutUrl = "https://checkout.stripe.com/c/pay/test_session_mock_${System.currentTimeMillis()}"
-                Log.i(TAG, "Mock checkout URL generated: $mockCheckoutUrl")
-                
-                return@withContext mockCheckoutUrl
-                
-                /* 実際のAPI呼び出し（ネットワーク問題解決後に復元）
-                val requestBody = CreateCheckoutSessionRequest(
-                    device_id = deviceId,
-                    product_type = productType,
-                    unlock_count = unlockCount
-                )
-                val response = apiService.createCheckoutSession(requestBody)
-                if (response.isSuccessful) {
-                    response.body()?.checkout_url
-                } else {
-                    Log.e(TAG, "Failed to create checkout session: ${response.code()} - ${response.errorBody()?.string()}")
-                    null
+                // 実際のAPI呼び出しを試行
+                try {
+                    val response = apiService.createCheckoutSession(
+                        CreateCheckoutSessionRequest(
+                            device_id = deviceId,
+                            product_type = productType,
+                            unlock_count = unlockCount
+                        )
+                    )
+                    
+                    if (response.isSuccessful) {
+                        val checkoutUrl = response.body()?.checkout_url
+                        Log.i(TAG, "Stripe checkout session created successfully: $checkoutUrl")
+                        return@withContext checkoutUrl
+                    } else {
+                        Log.e(TAG, "Failed to create checkout session: ${response.code()} - ${response.errorBody()?.string()}")
+                        return@withContext null
+                    }
+                } catch (networkException: Exception) {
+                    Log.e(TAG, "Network error during checkout session creation", networkException)
+                    return@withContext null
                 }
-                */
+                
             } catch (e: Exception) {
                 Log.e(TAG, "Exception in createCheckoutSession", e)
                 null
@@ -70,56 +72,67 @@ class StripeRepository(
     suspend fun confirmPayment(deviceId: String, purchaseToken: String, productType: String): Boolean {
         return withContext(Dispatchers.IO) {
             try {
-                // テスト用のモックレスポンス（ネットワーク接続問題を回避）
-                Log.i(TAG, "Mock: Confirming payment for device=$deviceId, token=$purchaseToken, product=$productType")
+                Log.i(TAG, "Confirming payment for device=$deviceId, token=$purchaseToken, product=$productType")
                 
-                // アプリ内の購入状態を更新
-                if (productType == "license") {
-                    val currentDate = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
-                    purchaseStateManager.setLicensePurchased(true, currentDate)
-                    Log.i(TAG, "Mock: License purchase state updated locally")
-                } else if (productType == "daypass") {
-                    // モックのデイパス情報
-                    purchaseStateManager.updateDaypassUnlockCount(5, "2024-05-28")
-                    Log.i(TAG, "Mock: Daypass unlock state updated locally: count=5, date=2024-05-28")
-                }
-                
-                Log.i(TAG, "Mock: Payment confirmed successfully for $productType")
-                return@withContext true
-                
-                /* 実際のAPI呼び出し（ネットワーク問題解決後に復元）
-                val response = if (productType == "license") {
-                    apiService.confirmLicense(LicenseConfirmRequest(device_id = deviceId, purchase_token = purchaseToken))
-                } else {
-                    apiService.unlockDaypass(UnlockDaypassRequest(device_id = deviceId, purchase_token = purchaseToken))
-                }
-
-                if (response.isSuccessful) {
-                    Log.i(TAG, "Payment confirmed successfully for $productType")
+                // テスト用セッションIDの場合はモック処理
+                if (purchaseToken.startsWith("test_session_")) {
+                    Log.i(TAG, "Test session detected, using mock payment confirmation")
                     
                     // アプリ内の購入状態を更新
                     if (productType == "license") {
                         val currentDate = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
                         purchaseStateManager.setLicensePurchased(true, currentDate)
-                        Log.i(TAG, "License purchase state updated locally")
+                        Log.i(TAG, "Test: License purchase state updated locally")
                     } else if (productType == "daypass") {
-                        // デイパスの場合、レスポンスからunlock_countとlast_unlock_dateを取得
-                        val responseBody = response.body()
-                        if (responseBody is com.example.timekeeper.data.api.UnlockDaypassResponse) {
-                            purchaseStateManager.updateDaypassUnlockCount(
-                                responseBody.unlock_count,
-                                responseBody.last_unlock_date
-                            )
-                            Log.i(TAG, "Daypass unlock state updated locally: count=${responseBody.unlock_count}, date=${responseBody.last_unlock_date}")
-                        }
+                        // テスト用のデイパス情報
+                        val currentDate = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
+                        val currentUnlockCount = purchaseStateManager.getDaypassUnlockCount()
+                        purchaseStateManager.updateDaypassUnlockCount(currentUnlockCount + 1, currentDate)
+                        Log.i(TAG, "Test: Daypass unlock state updated locally: count=${currentUnlockCount + 1}, date=$currentDate")
                     }
                     
-                    true
-                } else {
-                    Log.e(TAG, "Failed to confirm payment for $productType: ${response.code()} - ${response.errorBody()?.string()}")
-                    false
+                    Log.i(TAG, "Test: Payment confirmed successfully for $productType")
+                    return@withContext true
                 }
-                */
+                
+                // 実際のAPI呼び出しを試行
+                try {
+                    val response = if (productType == "license") {
+                        apiService.confirmLicense(LicenseConfirmRequest(device_id = deviceId, purchase_token = purchaseToken))
+                    } else {
+                        apiService.unlockDaypass(UnlockDaypassRequest(device_id = deviceId, purchase_token = purchaseToken))
+                    }
+
+                    if (response.isSuccessful) {
+                        Log.i(TAG, "Payment confirmed successfully for $productType")
+                        
+                        // アプリ内の購入状態を更新
+                        if (productType == "license") {
+                            val currentDate = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
+                            purchaseStateManager.setLicensePurchased(true, currentDate)
+                            Log.i(TAG, "License purchase state updated locally")
+                        } else if (productType == "daypass") {
+                            // デイパスの場合、レスポンスからunlock_countとlast_unlock_dateを取得
+                            val responseBody = response.body()
+                            if (responseBody is com.example.timekeeper.data.api.UnlockDaypassResponse) {
+                                purchaseStateManager.updateDaypassUnlockCount(
+                                    responseBody.unlock_count,
+                                    responseBody.last_unlock_date
+                                )
+                                Log.i(TAG, "Daypass unlock state updated locally: count=${responseBody.unlock_count}, date=${responseBody.last_unlock_date}")
+                            }
+                        }
+                        
+                        return@withContext true
+                    } else {
+                        Log.e(TAG, "Failed to confirm payment for $productType: ${response.code()} - ${response.errorBody()?.string()}")
+                        return@withContext false
+                    }
+                } catch (networkException: Exception) {
+                    Log.e(TAG, "Network error during payment confirmation", networkException)
+                    return@withContext false
+                }
+                
             } catch (e: Exception) {
                 Log.e(TAG, "Exception in confirmPayment for $productType", e)
                 false

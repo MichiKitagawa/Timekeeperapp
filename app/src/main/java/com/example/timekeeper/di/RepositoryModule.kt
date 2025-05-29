@@ -5,6 +5,7 @@ import com.example.timekeeper.data.AppUsageRepository
 import com.example.timekeeper.data.MonitoredAppRepository
 import com.example.timekeeper.data.PurchaseStateManager
 import com.example.timekeeper.data.StripeRepository
+import com.example.timekeeper.data.AccessibilityServiceMonitor
 import com.example.timekeeper.data.api.TimekeeperApiService
 import dagger.Module
 import dagger.Provides
@@ -42,5 +43,11 @@ object RepositoryModule {
     @Singleton
     fun provideMonitoredAppRepository(@ApplicationContext context: Context): MonitoredAppRepository {
         return MonitoredAppRepository(context)
+    }
+
+    @Provides
+    @Singleton
+    fun provideAccessibilityServiceMonitor(@ApplicationContext context: Context): AccessibilityServiceMonitor {
+        return AccessibilityServiceMonitor(context)
     }
 } 

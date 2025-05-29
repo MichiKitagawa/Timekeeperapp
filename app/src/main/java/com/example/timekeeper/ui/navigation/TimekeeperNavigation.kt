@@ -14,9 +14,11 @@ import com.example.timekeeper.ui.screens.LicenseScreen
 import com.example.timekeeper.ui.screens.LockScreen
 import com.example.timekeeper.ui.screens.MonitoringSetupScreen
 import kotlin.math.pow
+import com.example.timekeeper.viewmodel.StripeViewModel
 
 // ナビゲーションルート定義
 object TimekeeperRoutes {
+    const val ACCESSIBILITY_PROMPT = "accessibility_prompt"
     const val LICENSE_PURCHASE = "license_purchase"
     const val MONITORING_SETUP = "monitoring_setup"
     const val DASHBOARD = "dashboard"
@@ -30,6 +32,7 @@ fun TimekeeperNavigation(
     navController: NavHostController = rememberNavController(),
     startDestination: String = TimekeeperRoutes.LICENSE_PURCHASE,
     modifier: Modifier = Modifier,
+    stripeViewModel: StripeViewModel,
     onPurchaseLicenseClick: () -> Unit = {},
     onPurchaseDaypassClick: (Int?) -> Unit = {}
 ) {
@@ -38,10 +41,18 @@ fun TimekeeperNavigation(
         startDestination = startDestination,
         modifier = modifier
     ) {
+        // P00: アクセシビリティ誘導画面 (新規追加)
+        composable(TimekeeperRoutes.ACCESSIBILITY_PROMPT) {
+            // TODO: AccessibilityPromptScreen を作成する
+            // 現時点では仮の画面を表示
+            com.example.timekeeper.ui.screens.AccessibilityPromptScreen(navController = navController)
+        }
+        
         // P01: ライセンス購入画面
         composable(TimekeeperRoutes.LICENSE_PURCHASE) {
             LicenseScreen(
                 navController = navController,
+                stripeViewModel = stripeViewModel,
                 onNavigateToMonitoringSetup = {
                     navController.navigate(TimekeeperRoutes.MONITORING_SETUP) {
                         popUpTo(TimekeeperRoutes.LICENSE_PURCHASE) { inclusive = true }
@@ -96,6 +107,7 @@ fun TimekeeperNavigation(
 
             DayPassPurchaseScreen(
                 // unlockCount = unlockCount, // 削除
+                stripeViewModel = stripeViewModel,
                 onPurchaseSuccess = { // onPurchaseClick から変更
                     // デイパス購入処理後、ダッシュボードへ戻る
                     // この時、P04とP05はスタックからクリアされる想定

@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Payment Cancelled</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        body { font-family: sans-serif; display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100vh; margin: 0; text-align: center; padding: 20px; box-sizing: border-box; }
+        .icon { font-size: 48px; color: orange; }
+        .message { margin-top: 20px; font-size: 18px; }
+        .redirect-info { margin-top: 10px; font-size: 14px; color: #555; }
+    </style>
+    <script>
+        function getQueryParam(param) {
+            const urlParams = new URLSearchParams(window.location.search);
+            return urlParams.get(param);
+        }
+        window.onload = function() {
+            const productType = getQueryParam('product_type');
+            const status = getQueryParam('status');
+
+            if (status === 'cancel') {
+                const appLink = `app://com.example.timekeeper/checkout-cancel?product_type=${productType || ''}`;
+                document.getElementById('redirect-message').innerText = '購入がキャンセルされました。アプリに戻っています...';
+                try {
+                    window.location.href = appLink;
+                    setTimeout(function() {
+                        // document.getElementById('redirect-message').innerText = 'アプリが自動で開かない場合は、手動で起動してください。';
+                    }, 3000);
+                } catch (e) {
+                    console.error("Failed to redirect to app:", e);
+                    document.getElementById('redirect-message').innerText = 'アプリへのリダイレクトに失敗しました。手動でアプリを開いてください。';
+                }
+            } else {
+                document.getElementById('icon').innerText = '❓';
+                document.getElementById('redirect-message').innerText = '不正なアクセスです。';
+            }
+        };
+    </script>
+</head>
+<body>
+    <div id="icon" class="icon">✗</div>
+    <div id="redirect-message" class="message">購入がキャンセルされました。アプリに戻っています...</div>
+    <div class="redirect-info">このページは数秒後に自動的に閉じられます。</div>
+</body>
+</html> 

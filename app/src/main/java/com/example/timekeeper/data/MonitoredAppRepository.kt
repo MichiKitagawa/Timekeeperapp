@@ -13,7 +13,7 @@ import javax.inject.Singleton
 class MonitoredAppRepository @Inject constructor(
     private val context: Context
 ) {
-    private val prefs: SharedPreferences = context.getSharedPreferences("app_usage", Context.MODE_PRIVATE)
+    private val prefs: SharedPreferences = context.getSharedPreferences("monitored_apps", Context.MODE_PRIVATE)
     
     private val _monitoredApps = MutableStateFlow<List<MonitoredApp>>(emptyList())
     val monitoredApps: StateFlow<List<MonitoredApp>> = _monitoredApps
@@ -135,7 +135,7 @@ class MonitoredAppRepository @Inject constructor(
     /**
      * 監視対象アプリ一覧を読み込み
      */
-    private fun loadMonitoredApps() {
+    fun loadMonitoredApps() {
         val monitoredPackages = prefs.getStringSet("monitored_apps", emptySet()) ?: emptySet()
         val packageManager = context.packageManager
         

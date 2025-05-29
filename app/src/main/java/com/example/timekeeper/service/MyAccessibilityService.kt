@@ -2,6 +2,7 @@ package com.example.timekeeper.service
 
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.AccessibilityServiceInfo
+import android.content.Context
 import android.content.Intent
 import android.os.Handler
 import android.os.Looper
@@ -29,7 +30,7 @@ class MyAccessibilityService : AccessibilityService() {
 
     companion object {
         private const val TAG = "MyAccessibilityService"
-        private const val USAGE_TRACKING_INTERVAL = 10000L // テスト用: 10秒間隔
+        private const val USAGE_TRACKING_INTERVAL = 5000L // テスト用: 5秒間隔（デバッグ用）
         
         // サービスのstatic参照
         @Volatile
@@ -41,7 +42,7 @@ class MyAccessibilityService : AccessibilityService() {
     override fun onServiceConnected() {
         super.onServiceConnected()
         instance = this
-        Log.i(TAG, "Accessibility service connected")
+        Log.i(TAG, "🔧 Accessibility service connected")
         
         val info = AccessibilityServiceInfo()
         info.eventTypes = AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
@@ -49,32 +50,38 @@ class MyAccessibilityService : AccessibilityService() {
         info.flags = AccessibilityServiceInfo.FLAG_INCLUDE_NOT_IMPORTANT_VIEWS
         serviceInfo = info
         
+        Log.i(TAG, "🔧 Service info configured: eventTypes=${info.eventTypes}, flags=${info.flags}")
+        
         // 日次リセット処理を実行
         appUsageRepository.performDailyReset()
         
         // デバッグ用：監視対象アプリを確認
         val monitoredApps = monitoredAppRepository.monitoredApps.value
-        Log.d(TAG, "Service connected - Monitored apps: ${monitoredApps.size}")
+        Log.i(TAG, "🔧 Service connected - Monitored apps: ${monitoredApps.size}")
         monitoredApps.forEach { app ->
-            Log.d(TAG, "Monitored app: ${app.appName} (${app.packageName})")
+            Log.i(TAG, "🔧 Monitored app: ${app.appName} (${app.packageName})")
             
             // 既に制限超過しているアプリをブロック
             if (appUsageRepository.isUsageExceededWithDayPass(app.packageName)) {
                 blockApp(app.packageName)
-                Log.i(TAG, "Pre-blocked app due to usage exceeded: ${app.packageName}")
+                Log.w(TAG, "🔧 Pre-blocked app due to usage exceeded: ${app.packageName}")
             }
         }
+        
+        Log.i(TAG, "🔧 Accessibility service initialization completed")
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if (event?.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
             val packageName = event.packageName?.toString()
+            Log.d(TAG, "🔍 Window state changed - Package: $packageName, Current: $currentForegroundApp")
+            
             if (packageName != null && packageName != currentForegroundApp) {
-                Log.d(TAG, "Foreground app changed: $packageName")
+                Log.i(TAG, "📱 Foreground app changed: $packageName")
                 
                 // Timekeeperアプリ自体は監視対象外
                 if (packageName == "com.example.timekeeper") {
-                    Log.d(TAG, "Timekeeper app detected, skipping monitoring")
+                    Log.d(TAG, "⏭️ Timekeeper app detected, skipping monitoring")
                     currentForegroundApp = packageName
                     stopUsageTracking()
                     return
@@ -85,39 +92,43 @@ class MyAccessibilityService : AccessibilityService() {
                 
                 // 制限中のアプリかどうかを最初にチェック
                 if (blockedApps.contains(packageName)) {
-                    Log.w(TAG, "Blocked app $packageName detected, immediately blocking access")
+                    Log.w(TAG, "🚫 Blocked app $packageName detected, immediately blocking access")
                     blockAppAccess(packageName)
                     return
                 }
                 
                 // 新しいアプリが監視対象かチェック
-                if (monitoredAppRepository.isAppMonitored(packageName)) {
-                    Log.d(TAG, "Monitored app detected: $packageName")
+                val isMonitored = monitoredAppRepository.isAppMonitored(packageName)
+                Log.d(TAG, "🔍 Checking if $packageName is monitored: $isMonitored")
+                
+                if (isMonitored) {
+                    Log.i(TAG, "✅ Monitored app detected: $packageName")
                     
                     // 今日の使用時間と制限を確認
                     val todayUsage = appUsageRepository.getTodayUsage(packageName)
                     val currentLimit = appUsageRepository.getCurrentLimit(packageName)
                     
-                    Log.d(TAG, "App $packageName: usage=$todayUsage minutes, limit=$currentLimit minutes")
+                    Log.i(TAG, "📊 App $packageName: usage=$todayUsage minutes, limit=$currentLimit minutes")
                     
                     // 制限が無制限（Int.MAX_VALUE）の場合はスキップ
                     if (currentLimit == Int.MAX_VALUE) {
-                        Log.d(TAG, "App $packageName has unlimited usage, starting tracking")
+                        Log.d(TAG, "♾️ App $packageName has unlimited usage, starting tracking")
                         startUsageTracking(packageName)
                         return
                     }
                     
                     // 使用時間が制限を超えているかチェック
                     if (appUsageRepository.isUsageExceededWithDayPass(packageName)) {
-                        Log.i(TAG, "Usage limit reached for $packageName ($todayUsage >= $currentLimit)")
+                        Log.w(TAG, "⏰ Usage limit reached for $packageName ($todayUsage >= $currentLimit)")
                         blockApp(packageName)
                         blockAppAccess(packageName)
                     } else {
-                        Log.d(TAG, "Usage within limit for $packageName ($todayUsage < $currentLimit), starting tracking")
+                        Log.i(TAG, "✅ Usage within limit for $packageName ($todayUsage < $currentLimit), starting tracking")
                         // 制限内の場合は使用時間追跡を開始
                         startUsageTracking(packageName)
                     }
                 } else {
+                    Log.d(TAG, "⏭️ Non-monitored app: $packageName")
                     // 監視対象外のアプリの場合
                     currentForegroundApp = packageName
                 }
@@ -130,27 +141,32 @@ class MyAccessibilityService : AccessibilityService() {
      */
     private fun startUsageTracking(packageName: String) {
         currentForegroundApp = packageName
+        Log.i(TAG, "⏱️ Starting usage tracking for $packageName (interval: ${USAGE_TRACKING_INTERVAL}ms)")
         
         usageTrackingRunnable = object : Runnable {
             override fun run() {
-                // 1分経過したので使用時間を追加
-                Log.d(TAG, "Adding 1 minute usage for $packageName")
-                appUsageRepository.addUsageMinute(packageName)
-                
-                val newUsage = appUsageRepository.getTodayUsage(packageName)
-                val currentLimit = appUsageRepository.getCurrentLimit(packageName)
-                
-                Log.i(TAG, "Usage updated for $packageName: $newUsage/$currentLimit minutes")
-                
-                // 制限を超えたかチェック
-                if (appUsageRepository.isUsageExceeded(packageName)) {
-                    Log.i(TAG, "Usage limit reached for $packageName ($newUsage >= $currentLimit)")
-                    blockApp(packageName)
-                    blockAppAccess(packageName)
+                // 現在もそのアプリがフォアグラウンドにいるかチェック
+                if (currentForegroundApp == packageName) {
+                    Log.i(TAG, "⏰ Adding 1 minute usage for $packageName")
+                    appUsageRepository.addUsageMinute(packageName)
+                    
+                    val newUsage = appUsageRepository.getTodayUsage(packageName)
+                    val currentLimit = appUsageRepository.getCurrentLimit(packageName)
+                    
+                    Log.i(TAG, "📈 Usage updated for $packageName: $newUsage/$currentLimit minutes")
+                    
+                    // 制限を超えたかチェック
+                    if (appUsageRepository.isUsageExceeded(packageName)) {
+                        Log.w(TAG, "🚫 Usage limit reached for $packageName ($newUsage >= $currentLimit)")
+                        blockApp(packageName)
+                        blockAppAccess(packageName)
+                    } else {
+                        Log.d(TAG, "✅ Still within limit for $packageName, continuing tracking")
+                        // まだ制限内なので継続追跡
+                        handler.postDelayed(this, USAGE_TRACKING_INTERVAL)
+                    }
                 } else {
-                    Log.d(TAG, "Still within limit for $packageName, continuing tracking")
-                    // まだ制限内なので継続追跡
-                    handler.postDelayed(this, USAGE_TRACKING_INTERVAL)
+                    Log.d(TAG, "⏹️ App $packageName no longer in foreground, stopping tracking")
                 }
             }
         }
@@ -287,7 +303,48 @@ class MyAccessibilityService : AccessibilityService() {
     override fun onDestroy() {
         super.onDestroy()
         instance = null
-        Log.i(TAG, "Accessibility service destroyed")
+        Log.i(TAG, "🛑 Accessibility service destroyed - performing complete app reset")
+        
+        try {
+            // 全データを完全にクリア
+            val context = applicationContext
+            
+            // AppUsageRepositoryのデータをクリア
+            val appUsagePrefs = context.getSharedPreferences("app_usage", Context.MODE_PRIVATE)
+            appUsagePrefs.edit().clear().apply()
+            Log.i(TAG, "✅ App usage data cleared")
+            
+            // MonitoredAppRepositoryのデータをクリア
+            val monitoredAppPrefs = context.getSharedPreferences("monitored_apps", Context.MODE_PRIVATE)
+            monitoredAppPrefs.edit().clear().apply()
+            Log.i(TAG, "✅ Monitored apps data cleared")
+            
+            // PurchaseStateManagerのデータをクリア
+            val purchasePrefs = context.getSharedPreferences("purchase_state", Context.MODE_PRIVATE)
+            purchasePrefs.edit().clear().apply()
+            Log.i(TAG, "✅ Purchase state data cleared")
+            
+            // TimekeeperPrefsのデータもクリア
+            val timekeeperPrefs = context.getSharedPreferences("TimekeeperPrefs", Context.MODE_PRIVATE)
+            timekeeperPrefs.edit().clear().apply()
+            Log.i(TAG, "✅ Timekeeper preferences cleared")
+            
+            // RepositoryのStateFlowを更新するため、clearAllDataメソッドを呼び出し
+            try {
+                appUsageRepository.clearAllData()
+                monitoredAppRepository.clearAllData()
+                Log.i(TAG, "✅ Repository StateFlows updated")
+            } catch (e: Exception) {
+                Log.e(TAG, "❌ Failed to update repository StateFlows", e)
+            }
+            
+            Log.w(TAG, "🚨 COMPLETE RESET: All app data has been cleared due to accessibility service destruction")
+            Log.w(TAG, "💰 User must purchase license again to use the app")
+            
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Failed to perform complete reset on service destruction", e)
+        }
+        
         stopUsageTracking()
         stopContinuousBlocking()
     }

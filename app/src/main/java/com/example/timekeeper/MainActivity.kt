@@ -1,5 +1,6 @@
 package com.example.timekeeper
 
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
@@ -34,6 +35,9 @@ import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
 import java.util.UUID
 import javax.inject.Inject
+import com.example.timekeeper.service.MyAccessibilityService
+import android.provider.Settings
+import android.text.TextUtils
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
@@ -53,6 +57,8 @@ class MainActivity : ComponentActivity() {
 
     private val stripeViewModel: StripeViewModel by viewModels()
 
+    private lateinit var appSpecificDeviceId: String
+
     private fun clearOldSampleData() {
         // 古いサンプルデータが残っている場合はクリア
         val hasOldData = sharedPreferences.getBoolean("has_cleared_sample_data", false)
@@ -66,15 +72,52 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun retrieveAppSpecificDeviceId(): String {
-        var deviceId = sharedPreferences.getString("DEVICE_ID", null)
-        if (deviceId == null) {
-            deviceId = UUID.randomUUID().toString()
-            sharedPreferences.edit().putString("DEVICE_ID", deviceId).apply()
+        val storedDeviceId = sharedPreferences.getString("DEVICE_ID", null)
+        Log.d("MainActivity", "Device ID from SharedPreferences before check: $storedDeviceId")
+        if (storedDeviceId == null) {
+            val newDeviceId = UUID.randomUUID().toString()
+            Log.d("MainActivity", "New Device ID generated: $newDeviceId, because stored was null.")
+            sharedPreferences.edit().putString("DEVICE_ID", newDeviceId).apply()
+            return newDeviceId
+        } else {
+            Log.d("MainActivity", "Retrieved Device ID from SharedPreferences: $storedDeviceId")
+            return storedDeviceId
         }
-        return deviceId
+    }
+
+    private fun isAccessibilityServiceEnabled(context: Context): Boolean {
+        val service = ComponentName(context, MyAccessibilityService::class.java)
+        val accessibilityEnabled = Settings.Secure.getInt(
+            context.contentResolver,
+            Settings.Secure.ACCESSIBILITY_ENABLED,
+            0
+        )
+        if (accessibilityEnabled == 0) {
+            return false
+        }
+        val settingValue = Settings.Secure.getString(
+            context.contentResolver,
+            Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
+        )
+        if (settingValue != null) {
+            val splitter = TextUtils.SimpleStringSplitter(':')
+            splitter.setString(settingValue)
+            while (splitter.hasNext()) {
+                val accessibilityService = splitter.next()
+                if (accessibilityService.equals(service.flattenToString(), ignoreCase = true)) {
+                    return true
+                }
+            }
+        }
+        return false
     }
 
     private fun determineStartDestination(): String {
+        if (!isAccessibilityServiceEnabled(this)) {
+            Log.d("MainActivity", "Accessibility service not enabled, navigating to prompt.")
+            return TimekeeperRoutes.ACCESSIBILITY_PROMPT
+        }
+
         return if (purchaseStateManager.isLicensePurchased()) {
             // ライセンス購入済みの場合、監視対象アプリが設定されているかチェック
             val monitoredApps = monitoredAppRepository.monitoredApps.value
@@ -96,11 +139,10 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
 
         // デバッグ用：古いサンプルデータをクリア
-        clearOldSampleData()
+        // clearOldSampleData() // 常にクリアするのではなく、必要に応じて手動で呼び出すか、一度きりの処理にする
 
-        val appSpecificDeviceId = retrieveAppSpecificDeviceId()
-        stripeViewModel.setDeviceId(appSpecificDeviceId)
-        Log.d("MainActivity", "Device ID: $appSpecificDeviceId")
+        appSpecificDeviceId = retrieveAppSpecificDeviceId()
+        Log.d("MainActivity", "Device ID set for Stripe calls: $appSpecificDeviceId") // ここでのログも重要
 
         handleDeepLink(intent)
 
@@ -109,6 +151,16 @@ class MainActivity : ComponentActivity() {
                 val navController = rememberNavController()
                 val context = LocalContext.current
                 val startDestination = determineStartDestination()
+
+                // LockScreenActivityからのインテント処理
+                LaunchedEffect(Unit) {
+                    intent?.getStringExtra("navigate_to")?.let { destination ->
+                        if (destination == "day_pass_purchase") {
+                            Log.i("MainActivity", "Navigating to day pass purchase from lock screen")
+                            navController.navigate(TimekeeperRoutes.DAY_PASS_PURCHASE)
+                        }
+                    }
+                }
 
                 val checkoutUrl by stripeViewModel.checkoutUrlFlow.collectAsState()
                 LaunchedEffect(checkoutUrl) {
@@ -171,11 +223,12 @@ class MainActivity : ComponentActivity() {
                         navController = navController,
                         startDestination = startDestination,
                         modifier = Modifier.padding(innerPadding),
+                        stripeViewModel = stripeViewModel,
                         onPurchaseLicenseClick = {
-                            stripeViewModel.startStripeCheckout("license", null)
+                            stripeViewModel.startStripeCheckout(appSpecificDeviceId, "license", null)
                         },
                         onPurchaseDaypassClick = { unlockCount ->
-                            stripeViewModel.startStripeCheckout("daypass", unlockCount ?: 1)
+                            stripeViewModel.startStripeCheckout(appSpecificDeviceId, "daypass", unlockCount ?: 1)
                         }
                     )
                 }
@@ -200,7 +253,7 @@ class MainActivity : ComponentActivity() {
                     val productType = uri.getQueryParameter("product_type")
                     if (sessionId != null && productType != null) {
                         Log.i("MainActivity", "Deep link: Checkout successful! Session ID: $sessionId, Product Type: $productType")
-                        stripeViewModel.confirmStripePayment(sessionId, productType)
+                        stripeViewModel.confirmStripePayment(appSpecificDeviceId, sessionId, productType)
                     } else {
                         Log.e("MainActivity", "Deep link: Session ID or Product Type not found in success URL")
                     }

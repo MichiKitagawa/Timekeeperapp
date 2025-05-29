@@ -1,5 +1,6 @@
 package com.example.timekeeper.viewmodel
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.timekeeper.data.StripeRepository
@@ -27,23 +28,14 @@ class StripeViewModel @Inject constructor(
     private val _paymentUiState = MutableStateFlow<PaymentUiState>(PaymentUiState.Idle)
     val paymentUiState: StateFlow<PaymentUiState> = _paymentUiState
 
-    // このデバイスIDは、実際には SharedPreferences や UserDataStore などから取得することを想定
-    // MainActivity で生成しているものをViewModelでも利用できるようにDIするか、
-    // ApplicationContext経由で取得するなどの方法が考えられます。
-    // ここでは仮に固定値または引数で渡されることを想定します。
-    private var currentDeviceId: String = "dummy_device_id" // TODO: 適切な方法で設定する
-
-    fun setDeviceId(deviceId: String) {
-        this.currentDeviceId = deviceId
-    }
-
     /**
      * Stripe Checkoutセッションを開始し、決済ページのURLを返します。
      * UIスレッドから呼び出されることを想定。
      */
-    fun startStripeCheckout(productType: String, unlockCount: Int?) {
+    fun startStripeCheckout(deviceId: String, productType: String, unlockCount: Int?) {
         viewModelScope.launch {
             _paymentUiState.value = PaymentUiState.Loading
+            Log.d("StripeViewModel", "startStripeCheckout called with deviceId: $deviceId")
             
             // デイパスの場合、現在のunlock_countを取得
             val actualUnlockCount = if (productType == "daypass") {
@@ -52,7 +44,7 @@ class StripeViewModel @Inject constructor(
                 unlockCount
             }
             
-            val checkoutUrl = stripeRepository.createCheckoutSession(currentDeviceId, productType, actualUnlockCount)
+            val checkoutUrl = stripeRepository.createCheckoutSession(deviceId, productType, actualUnlockCount)
             if (checkoutUrl != null) {
                 // Activity/Fragment側でWebViewを開くためにURLを通知する
                 // ここでは例としてStateFlowでURLを公開するが、
@@ -79,10 +71,11 @@ class StripeViewModel @Inject constructor(
      * Stripeからのリダイレクト後、決済を最終確認します。
      * (ディープリンク経由でActivityから呼び出されることを想定)
      */
-    fun confirmStripePayment(purchaseToken: String, productType: String) {
+    fun confirmStripePayment(deviceId: String, purchaseToken: String, productType: String) {
         viewModelScope.launch {
             _paymentUiState.value = PaymentUiState.Loading
-            val success = stripeRepository.confirmPayment(currentDeviceId, purchaseToken, productType)
+            Log.d("StripeViewModel", "confirmStripePayment called with deviceId: $deviceId, token: $purchaseToken")
+            val success = stripeRepository.confirmPayment(deviceId, purchaseToken, productType)
             if (success) {
                 _paymentUiState.value = PaymentUiState.Success("Payment confirmed successfully for $productType!")
                 // 購入状態の更新はStripeRepository内で行われるため、ここでは追加処理は不要
