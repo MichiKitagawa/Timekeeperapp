@@ -22,7 +22,7 @@ YOUR_HOSTED_DOMAIN = "https://timekeeper-redirect.example.com" # Stripe決済後
 LICENSE_PRICE_ID = "price_1RSoQKCplaJfZ2mW9cv8EVSw" # Stripeダッシュボードで設定したライセンス商品の価格ID
 
 # ngrokのURL (開発時に一時的に使用) - 実行の都度変更が必要な場合があります
-YOUR_NGROK_URL = "https://9068-240b-c020-490-84ae-55b2-1437-165b-1acd.ngrok-free.app"
+YOUR_NGROK_URL = "https://1e4a-240b-c020-490-84ae-f802-5120-8f34-3ed4.ngrok-free.app"
 
 
 @asynccontextmanager

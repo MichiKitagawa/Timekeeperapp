@@ -13,7 +13,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -87,8 +87,6 @@ fun StripeCheckoutScreen(
     onPaymentCancelled: () -> Unit
 ) {
     var isLoading by remember { mutableStateOf(true) }
-    var paymentProcessed by remember { mutableStateOf(false) }
-    val context = LocalContext.current
 
     Column(
         modifier = Modifier.fillMaxSize()
@@ -97,7 +95,7 @@ fun StripeCheckoutScreen(
             title = { Text("決済") },
             navigationIcon = {
                 IconButton(onClick = onClose) {
-                    Icon(Icons.Default.ArrowBack, contentDescription = "戻る")
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "戻る")
                 }
             },
             actions = {
@@ -133,12 +131,14 @@ fun StripeCheckoutScreen(
                                 isLoading = false
                             }
 
+                            @Suppress("OVERRIDE_DEPRECATION")
                             override fun onReceivedError(view: WebView?, errorCode: Int, description: String?, failingUrl: String?) {
                                 super.onReceivedError(view, errorCode, description, failingUrl)
                                 Log.e("StripeCheckoutActivity", "WebView error: $errorCode - $description for URL: $failingUrl")
                                 isLoading = false
                             }
 
+                            @Suppress("OVERRIDE_DEPRECATION")
                             override fun shouldOverrideUrlLoading(view: WebView?, url: String?): Boolean {
                                 Log.d("StripeCheckoutActivity", "URL loading: $url")
                                 

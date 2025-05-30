@@ -21,7 +21,6 @@ import com.example.timekeeper.viewmodel.MonitoringSetupViewModel
 @Composable
 fun MonitoringSetupScreen(
     onSetupComplete: () -> Unit,
-    navController: NavController,
     viewModel: MonitoringSetupViewModel = hiltViewModel()
 ) {
     val installedApps by viewModel.installedApps.collectAsState()
@@ -139,7 +138,7 @@ fun MonitoringSetupScreen(
                             label = { Text("アプリを選択") },
                             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
                             modifier = Modifier
-                                .menuAnchor()
+                                .menuAnchor(MenuAnchorType.PrimaryNotEditable)
                                 .fillMaxWidth()
                         )
                         

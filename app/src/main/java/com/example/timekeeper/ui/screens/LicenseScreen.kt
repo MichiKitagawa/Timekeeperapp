@@ -20,7 +20,6 @@ import com.example.timekeeper.ui.theme.TimekeeperTheme
 
 @Composable
 fun LicenseScreen(
-    navController: NavController,
     stripeViewModel: StripeViewModel,
     onNavigateToMonitoringSetup: () -> Unit,
     onPurchaseLicenseClick: () -> Unit = {}
@@ -98,6 +97,7 @@ fun LicenseScreen(
                 factory = { context ->
                     WebView(context).apply {
                         webViewClient = object : WebViewClient() {
+                            @Suppress("OVERRIDE_DEPRECATION")
                             override fun shouldOverrideUrlLoading(view: WebView?, url: String?): Boolean {
                                 url?.let { urlString ->
                                     when {

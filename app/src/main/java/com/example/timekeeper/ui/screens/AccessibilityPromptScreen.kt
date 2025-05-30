@@ -17,10 +17,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import androidx.navigation.NavController
+import android.content.ComponentName
+import android.text.TextUtils
+import com.example.timekeeper.service.MyAccessibilityService
 
 @Composable
-fun AccessibilityPromptScreen(navController: NavController) {
+fun AccessibilityPromptScreen(
+    onAccessibilityEnabled: () -> Unit
+) {
     val context = LocalContext.current
 
     Column(
@@ -36,27 +40,34 @@ fun AccessibilityPromptScreen(navController: NavController) {
         )
         Spacer(modifier = Modifier.height(16.dp))
         Text(
-            text = "このアプリの全ての機能を利用するには、アクセシビリティサービスを有効にする必要があります。「設定を開く」ボタンをタップして、表示されるリストから「Timekeeper」を選択し、サービスをONにしてください。"
+            text = "このアプリの機能を利用するには、アクセシビリティサービスの有効化が必要です。\n\n設定画面でTimekeeperのアクセシビリティサービスをONにしてください。"
         )
         Spacer(modifier = Modifier.height(24.dp))
+        
+        // アクセシビリティ設定ボタン
         Button(onClick = {
             openAccessibilitySettings(context)
         }) {
-            Text("設定を開く")
+            Text("アクセシビリティ設定を開く")
         }
-        Spacer(modifier = Modifier.height(16.dp))
+        
+        Spacer(modifier = Modifier.height(24.dp))
+        
+        // 設定完了確認ボタン
         Button(onClick = {
-            // アプリを終了するか、MainActivityに戻って再チェックさせるか検討
-            // ここではMainActivityに戻り、アクセシビリティが有効になっていれば次の画面へ進むことを期待
-            // (MainActivity側でonResume等で再チェックするロジックが必要になる可能性)
-            // または、この画面にとどまり、ユーザーが手動で有効化するのを待つ
-            // 今回は、ユーザーが設定後、アプリに手動で戻ることを想定し、何もしないか、
-            // 最小化するなどの挙動も考えられる。
-            // 一旦、MainActivityのonResumeでの再チェックを期待して、ここでは何もしない。
-            // または、特定のルートに飛ばさず、navController.popBackStack() で前の画面に戻るなど。
-            // 今回はユーザーが設定から戻ってきた際に MainActivity の再開でチェックされることを期待。
+            val isAccessibilityEnabled = isAccessibilityServiceEnabled(context)
+            
+            if (isAccessibilityEnabled) {
+                onAccessibilityEnabled()
+            } else {
+                android.widget.Toast.makeText(
+                    context, 
+                    "アクセシビリティサービスの有効化が必要です。", 
+                    android.widget.Toast.LENGTH_LONG
+                ).show()
+            }
         }) {
-            Text("設定しました (アプリに戻る)")
+            Text("設定完了")
         }
     }
 }
@@ -64,4 +75,31 @@ fun AccessibilityPromptScreen(navController: NavController) {
 private fun openAccessibilitySettings(context: Context) {
     val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
     context.startActivity(intent)
+}
+
+private fun isAccessibilityServiceEnabled(context: Context): Boolean {
+    val service = ComponentName(context, MyAccessibilityService::class.java)
+    val accessibilityEnabled = Settings.Secure.getInt(
+        context.contentResolver,
+        Settings.Secure.ACCESSIBILITY_ENABLED,
+        0
+    )
+    if (accessibilityEnabled == 0) {
+        return false
+    }
+    val settingValue = Settings.Secure.getString(
+        context.contentResolver,
+        Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
+    )
+    if (settingValue != null) {
+        val splitter = TextUtils.SimpleStringSplitter(':')
+        splitter.setString(settingValue)
+        while (splitter.hasNext()) {
+            val accessibilityService = splitter.next()
+            if (accessibilityService.equals(service.flattenToString(), ignoreCase = true)) {
+                return true
+            }
+        }
+    }
+    return false
 } 

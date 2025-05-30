@@ -12,16 +12,12 @@ import androidx.activity.viewModels
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import android.widget.Toast
-import androidx.compose.ui.tooling.preview.Preview
-import androidx.lifecycle.lifecycleScope
 import androidx.navigation.compose.rememberNavController
 import com.example.timekeeper.ui.navigation.TimekeeperNavigation
 import com.example.timekeeper.ui.navigation.TimekeeperRoutes
@@ -31,8 +27,10 @@ import com.example.timekeeper.viewmodel.StripeViewModel
 import com.example.timekeeper.data.PurchaseStateManager
 import com.example.timekeeper.data.MonitoredAppRepository
 import com.example.timekeeper.data.AppUsageRepository
+import com.example.timekeeper.service.HeartbeatService
+import com.example.timekeeper.util.GapDetector
+import com.example.timekeeper.util.HeartbeatLogger
 import dagger.hilt.android.AndroidEntryPoint
-import kotlinx.coroutines.launch
 import java.util.UUID
 import javax.inject.Inject
 import com.example.timekeeper.service.MyAccessibilityService
@@ -51,52 +49,43 @@ class MainActivity : ComponentActivity() {
     @Inject
     lateinit var appUsageRepository: AppUsageRepository
 
+    @Inject
+    lateinit var gapDetector: GapDetector
+
+    @Inject
+    lateinit var heartbeatLogger: HeartbeatLogger
+
+    private val stripeViewModel: StripeViewModel by viewModels()
+    private lateinit var appSpecificDeviceId: String
+
     private val sharedPreferences by lazy {
         getSharedPreferences("TimekeeperPrefs", Context.MODE_PRIVATE)
     }
 
-    private val stripeViewModel: StripeViewModel by viewModels()
-
-    private lateinit var appSpecificDeviceId: String
-
-    private fun clearOldSampleData() {
-        // 古いサンプルデータが残っている場合はクリア
-        val hasOldData = sharedPreferences.getBoolean("has_cleared_sample_data", false)
-        if (!hasOldData) {
-            Log.d("MainActivity", "Clearing old sample data")
-            monitoredAppRepository.clearAllData()
-            appUsageRepository.clearAllData()
-            sharedPreferences.edit().putBoolean("has_cleared_sample_data", true).apply()
-            Log.d("MainActivity", "Old sample data cleared")
-        }
-    }
-
     private fun retrieveAppSpecificDeviceId(): String {
         val storedDeviceId = sharedPreferences.getString("DEVICE_ID", null)
-        Log.d("MainActivity", "Device ID from SharedPreferences before check: $storedDeviceId")
-        if (storedDeviceId == null) {
+        return if (storedDeviceId == null) {
             val newDeviceId = UUID.randomUUID().toString()
-            Log.d("MainActivity", "New Device ID generated: $newDeviceId, because stored was null.")
             sharedPreferences.edit().putString("DEVICE_ID", newDeviceId).apply()
-            return newDeviceId
+            Log.d("MainActivity", "New Device ID generated: $newDeviceId")
+            newDeviceId
         } else {
-            Log.d("MainActivity", "Retrieved Device ID from SharedPreferences: $storedDeviceId")
-            return storedDeviceId
+            Log.d("MainActivity", "Retrieved Device ID: $storedDeviceId")
+            storedDeviceId
         }
     }
 
-    private fun isAccessibilityServiceEnabled(context: Context): Boolean {
-        val service = ComponentName(context, MyAccessibilityService::class.java)
+    private fun isAccessibilityServiceEnabled(): Boolean {
+        val service = ComponentName(this, MyAccessibilityService::class.java)
         val accessibilityEnabled = Settings.Secure.getInt(
-            context.contentResolver,
+            contentResolver,
             Settings.Secure.ACCESSIBILITY_ENABLED,
             0
         )
-        if (accessibilityEnabled == 0) {
-            return false
-        }
+        if (accessibilityEnabled == 0) return false
+
         val settingValue = Settings.Secure.getString(
-            context.contentResolver,
+            contentResolver,
             Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
         )
         if (settingValue != null) {
@@ -113,37 +102,37 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun determineStartDestination(): String {
-        if (!isAccessibilityServiceEnabled(this)) {
-            Log.d("MainActivity", "Accessibility service not enabled, navigating to prompt.")
+        // アクセシビリティサービスが有効でない場合、設定を促す
+        if (!isAccessibilityServiceEnabled()) {
             return TimekeeperRoutes.ACCESSIBILITY_PROMPT
         }
 
-        return if (purchaseStateManager.isLicensePurchased()) {
-            // ライセンス購入済みの場合、監視対象アプリが設定されているかチェック
-            val monitoredApps = monitoredAppRepository.monitoredApps.value
-            if (monitoredApps.isEmpty()) {
-                Log.d("MainActivity", "License purchased but no monitored apps, starting with Monitoring Setup")
-                TimekeeperRoutes.MONITORING_SETUP
-            } else {
-                Log.d("MainActivity", "License purchased and monitored apps configured, starting with Dashboard")
-            TimekeeperRoutes.DASHBOARD
-            }
-        } else {
-            Log.d("MainActivity", "License not purchased, starting with License Purchase")
-            TimekeeperRoutes.LICENSE_PURCHASE
+        // ライセンス購入済みかチェック
+        if (!purchaseStateManager.isLicensePurchased()) {
+            return TimekeeperRoutes.LICENSE_PURCHASE
         }
+
+        // 監視対象アプリが設定されているかチェック
+        val monitoredApps = monitoredAppRepository.monitoredApps.value
+        if (monitoredApps.isEmpty()) {
+            return TimekeeperRoutes.MONITORING_SETUP
+        }
+
+        // 全て設定済みならダッシュボード
+        return TimekeeperRoutes.DASHBOARD
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
-        // デバッグ用：古いサンプルデータをクリア
-        // clearOldSampleData() // 常にクリアするのではなく、必要に応じて手動で呼び出すか、一度きりの処理にする
+        // セキュリティチェック：heartbeatによるギャップ検知
+        performHeartbeatSecurityCheck()
+
+        // HeartbeatServiceを開始
+        startHeartbeatService()
 
         appSpecificDeviceId = retrieveAppSpecificDeviceId()
-        Log.d("MainActivity", "Device ID set for Stripe calls: $appSpecificDeviceId") // ここでのログも重要
-
         handleDeepLink(intent)
 
         setContent {
@@ -156,7 +145,6 @@ class MainActivity : ComponentActivity() {
                 LaunchedEffect(Unit) {
                     intent?.getStringExtra("navigate_to")?.let { destination ->
                         if (destination == "day_pass_purchase") {
-                            Log.i("MainActivity", "Navigating to day pass purchase from lock screen")
                             navController.navigate(TimekeeperRoutes.DAY_PASS_PURCHASE)
                         }
                     }
@@ -177,69 +165,38 @@ class MainActivity : ComponentActivity() {
                     when (val state = paymentUiState) {
                         is com.example.timekeeper.viewmodel.PaymentUiState.Success -> {
                             Toast.makeText(context, state.message, Toast.LENGTH_LONG).show()
+                            
                             if (state.message.contains("license")) {
-                                navController.navigate(com.example.timekeeper.ui.navigation.TimekeeperRoutes.MONITORING_SETUP) {
-                                    popUpTo(com.example.timekeeper.ui.navigation.TimekeeperRoutes.LICENSE_PURCHASE) { inclusive = true }
+                                // ライセンス購入成功時はアプリ設定画面へ
+                                navController.navigate(TimekeeperRoutes.MONITORING_SETUP) {
+                                    popUpTo(TimekeeperRoutes.LICENSE_PURCHASE) { inclusive = true }
                                 }
                             } else if (state.message.contains("daypass")) {
                                 // デイパス購入成功時の処理
-                                Log.i("MainActivity", "🎉 Day pass purchase successful, applying unlock")
+                                Log.i("MainActivity", "Day pass purchase successful, applying unlock")
                                 
                                 // 全ての監視対象アプリにデイパスを適用
-                                Log.i("MainActivity", "🎉 Calling appUsageRepository.purchaseDayPassForAllApps()")
                                 appUsageRepository.purchaseDayPassForAllApps()
-                                Log.i("MainActivity", "🎉 appUsageRepository.purchaseDayPassForAllApps() completed")
-                                
-                                // デバッグ：デイパス状態を確認
-                                val monitoredApps = monitoredAppRepository.monitoredApps.value
-                                Log.i("MainActivity", "🎉 Verifying day pass state for ${monitoredApps.size} monitored apps")
-                                monitoredApps.forEach { app ->
-                                    val hasDayPass = appUsageRepository.hasDayPass(app.packageName)
-                                    val isExceeded = appUsageRepository.isUsageExceededWithDayPass(app.packageName)
-                                    Log.i("MainActivity", "🎉 App ${app.packageName}: dayPass=$hasDayPass, exceeded=$isExceeded")
-                                }
                                 
                                 // アクセシビリティサービスにブロック解除を通知
-                                Log.i("MainActivity", "🎉 Starting accessibility service notification process")
                                 try {
-                                    Log.d("MainActivity", "🎉 Attempting to get MyAccessibilityService class")
                                     val serviceClass = Class.forName("com.example.timekeeper.service.MyAccessibilityService")
-                                    Log.d("MainActivity", "🎉 Got service class: $serviceClass")
-                                    
-                                    Log.d("MainActivity", "🎉 Attempting to get getInstance method")
                                     val getInstanceMethod = serviceClass.getMethod("getInstance")
-                                    Log.d("MainActivity", "🎉 Got getInstance method: $getInstanceMethod")
-                                    
-                                    Log.d("MainActivity", "🎉 Calling getInstance method")
                                     val serviceInstance = getInstanceMethod.invoke(null)
-                                    Log.d("MainActivity", "🎉 Got service instance: $serviceInstance")
                                     
                                     if (serviceInstance != null) {
-                                        Log.d("MainActivity", "🎉 Service instance is not null, getting onDayPassPurchasedForAllApps method")
                                         val onDayPassPurchasedMethod = serviceClass.getMethod("onDayPassPurchasedForAllApps")
-                                        Log.d("MainActivity", "🎉 Got method: $onDayPassPurchasedMethod")
-                                        
-                                        Log.i("MainActivity", "🎉 Calling onDayPassPurchasedForAllApps on service instance")
                                         onDayPassPurchasedMethod.invoke(serviceInstance)
-                                        Log.i("MainActivity", "🎉 Successfully notified accessibility service about day pass purchase")
-                                    } else {
-                                        Log.w("MainActivity", "🚨 Accessibility service instance is null - service may not be running")
-                                        Log.w("MainActivity", "🚨 This means the user needs to restart the app or re-enable accessibility service")
+                                        Log.i("MainActivity", "Successfully notified accessibility service about day pass purchase")
                                     }
-                                } catch (e: ClassNotFoundException) {
-                                    Log.e("MainActivity", "🚨 Failed to find MyAccessibilityService class", e)
-                                } catch (e: NoSuchMethodException) {
-                                    Log.e("MainActivity", "🚨 Failed to find method in accessibility service", e)
                                 } catch (e: Exception) {
-                                    Log.e("MainActivity", "🚨 Failed to notify accessibility service", e)
+                                    Log.e("MainActivity", "Failed to notify accessibility service", e)
                                 }
                                 
-                                Log.i("MainActivity", "🎉 Navigating back to dashboard")
                                 // ダッシュボードに戻る
-                                navController.navigate(com.example.timekeeper.ui.navigation.TimekeeperRoutes.DASHBOARD) {
-                                    popUpTo(com.example.timekeeper.ui.navigation.TimekeeperRoutes.DAY_PASS_PURCHASE) { inclusive = true }
+                                navController.navigate(TimekeeperRoutes.DASHBOARD) {
+                                    popUpTo(TimekeeperRoutes.DAY_PASS_PURCHASE) { inclusive = true }
                                 }
-                                Log.i("MainActivity", "🎉 Day pass purchase processing completed")
                             }
                         }
                         is com.example.timekeeper.viewmodel.PaymentUiState.Error -> {
@@ -269,14 +226,12 @@ class MainActivity : ComponentActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        Log.d("MainActivity", "onNewIntent called with: $intent")
         setIntent(intent)
         handleDeepLink(intent)
     }
 
     private fun handleDeepLink(intent: Intent?) {
         intent?.data?.let { uri ->
-            Log.i("MainActivity", "Handling deep link: $uri")
             if (uri.scheme == "app" && uri.host == "com.example.timekeeper") {
                 val pathSegments = uri.pathSegments
                 if (pathSegments.contains("checkout-success")) {
@@ -285,29 +240,84 @@ class MainActivity : ComponentActivity() {
                     if (sessionId != null && productType != null) {
                         Log.i("MainActivity", "Deep link: Checkout successful! Session ID: $sessionId, Product Type: $productType")
                         stripeViewModel.confirmStripePayment(appSpecificDeviceId, sessionId, productType)
-                    } else {
-                        Log.e("MainActivity", "Deep link: Session ID or Product Type not found in success URL")
                     }
-                } else if (pathSegments.contains("checkout-cancel")) {
-                    Log.i("MainActivity", "Deep link: Checkout cancelled.")
                 }
             }
         }
     }
-}
 
-@Composable
-fun Greeting(name: String, modifier: Modifier = Modifier) {
-    Text(
-        text = "Hello $name!",
-        modifier = modifier
-    )
-}
-
-@Preview(showBackground = true)
-@Composable
-fun GreetingPreview() {
-    TimekeeperTheme {
-        Greeting("Android")
+    /**
+     * Heartbeatによるセキュリティチェック
+     * 不正なサービス停止を検知してアプリを初期化
+     */
+    private fun performHeartbeatSecurityCheck() {
+        try {
+            Log.i("MainActivity", "Performing heartbeat security check")
+            
+            val breach = gapDetector.checkForSuspiciousGaps()
+            if (breach != null && breach.severity == GapDetector.SecurityBreach.Severity.SECURITY_BREACH) {
+                Log.w("MainActivity", "SECURITY BREACH DETECTED: Suspicious gap of ${breach.gapMinutes} minutes")
+                
+                // Toast表示
+                Toast.makeText(
+                    this,
+                    "制限回避が検知されました。アプリを初期化します。\n停止期間: ${breach.gapMinutes}分",
+                    Toast.LENGTH_LONG
+                ).show()
+                
+                // アプリデータを完全初期化
+                resetAppDataDueToSecurityBreach()
+                
+                Log.w("MainActivity", "App data has been reset due to security breach")
+            }
+        } catch (e: Exception) {
+            Log.e("MainActivity", "Error during security check", e)
+        }
+    }
+    
+    /**
+     * セキュリティ違反によるアプリデータ完全初期化
+     */
+    private fun resetAppDataDueToSecurityBreach() {
+        try {
+            // 全SharedPreferencesをクリア
+            val timekeeperPrefs = getSharedPreferences("TimekeeperPrefs", Context.MODE_PRIVATE)
+            val monitoredAppPrefs = getSharedPreferences("monitored_apps", Context.MODE_PRIVATE)
+            val appUsagePrefs = getSharedPreferences("app_usage", Context.MODE_PRIVATE)
+            val heartbeatPrefs = getSharedPreferences("heartbeat_log", Context.MODE_PRIVATE)
+            val purchasePrefs = getSharedPreferences("purchase_state", Context.MODE_PRIVATE)
+            
+            timekeeperPrefs.edit().clear().apply()
+            monitoredAppPrefs.edit().clear().apply()
+            appUsagePrefs.edit().clear().apply()
+            heartbeatPrefs.edit().clear().apply()
+            purchasePrefs.edit().clear().apply()
+            
+            // Repository データもクリア
+            purchaseStateManager.clearPurchaseState()
+            monitoredAppRepository.clearAllData()
+            appUsageRepository.clearAllData()
+            heartbeatLogger.clearHeartbeatHistory()
+            
+            // デバイスIDは保持
+            timekeeperPrefs.edit().putString("DEVICE_ID", appSpecificDeviceId).apply()
+            
+            Log.i("MainActivity", "Complete app data reset finished due to security breach")
+        } catch (e: Exception) {
+            Log.e("MainActivity", "Error resetting app data", e)
+        }
+    }
+    
+    /**
+     * HeartbeatServiceを開始
+     */
+    private fun startHeartbeatService() {
+        try {
+            val intent = Intent(this, HeartbeatService::class.java)
+            startForegroundService(intent)
+            Log.i("MainActivity", "HeartbeatService started")
+        } catch (e: Exception) {
+            Log.e("MainActivity", "Error starting HeartbeatService", e)
+        }
     }
 }

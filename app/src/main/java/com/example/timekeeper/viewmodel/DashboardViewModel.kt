@@ -5,21 +5,18 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.timekeeper.data.MonitoredAppRepository
 import com.example.timekeeper.data.AppUsageRepository
-import com.example.timekeeper.data.AccessibilityServiceMonitor
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.SharingStarted
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @HiltViewModel
 class DashboardViewModel @Inject constructor(
     private val monitoredAppRepository: MonitoredAppRepository,
-    private val appUsageRepository: AppUsageRepository,
-    private val accessibilityServiceMonitor: AccessibilityServiceMonitor
+    private val appUsageRepository: AppUsageRepository
 ) : ViewModel() {
 
     companion object {
@@ -34,17 +31,13 @@ class DashboardViewModel @Inject constructor(
         val hasDayPass: Boolean = false
     )
 
-    // アクセシビリティサービスの状態
-    val isAccessibilityServiceEnabled = accessibilityServiceMonitor.isServiceEnabled
-
     // 監視対象アプリと使用状況を組み合わせたデータ
     val appUsageInfoList: StateFlow<List<AppUsageInfo>> = combine(
         monitoredAppRepository.monitoredApps,
-        appUsageRepository.usageData,
-        accessibilityServiceMonitor.isServiceEnabled
-    ) { monitoredApps, usageData, isServiceEnabled ->
+        appUsageRepository.usageData
+    ) { monitoredApps, usageData ->
         Log.i(TAG, "=== Data combination triggered ===")
-        Log.d(TAG, "Monitored apps: ${monitoredApps.size}, Usage data entries: ${usageData.size}, Service enabled: $isServiceEnabled")
+        Log.d(TAG, "Monitored apps: ${monitoredApps.size}, Usage data entries: ${usageData.size}")
         
         val result = monitoredApps.map { monitoredApp ->
             val usageInfo = usageData[monitoredApp.packageName]
@@ -74,19 +67,6 @@ class DashboardViewModel @Inject constructor(
     init {
         Log.d(TAG, "DashboardViewModel initialized")
         
-        // アクセシビリティサービスの状態変化を監視
-        viewModelScope.launch {
-            accessibilityServiceMonitor.isServiceEnabled.collect { isEnabled ->
-                Log.i(TAG, "Accessibility service status changed: $isEnabled")
-                
-                if (!isEnabled) {
-                    Log.w(TAG, "⚠️ Accessibility service disabled - forcing data refresh")
-                    // データを強制的に再読み込み
-                    refreshData()
-                }
-            }
-        }
-        
         // デバッグ用：データの状態を定期的にログ出力
         viewModelScope.launch {
             kotlinx.coroutines.delay(2000) // 2秒待機
@@ -106,7 +86,7 @@ class DashboardViewModel @Inject constructor(
     /**
      * データを強制的に再読み込み
      */
-    private fun refreshData() {
+    fun refreshData() {
         viewModelScope.launch {
             try {
                 // MonitoredAppRepositoryのデータを再読み込み
@@ -116,12 +96,5 @@ class DashboardViewModel @Inject constructor(
                 Log.e(TAG, "❌ Failed to refresh data", e)
             }
         }
-    }
-
-    /**
-     * アクセシビリティサービスの状態を強制チェック
-     */
-    fun forceCheckAccessibilityService() {
-        accessibilityServiceMonitor.forceCheck()
     }
 } 

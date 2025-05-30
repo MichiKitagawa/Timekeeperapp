@@ -1,11 +1,11 @@
 package com.example.timekeeper.di
 
 import android.content.Context
+import android.content.SharedPreferences
 import com.example.timekeeper.data.AppUsageRepository
 import com.example.timekeeper.data.MonitoredAppRepository
 import com.example.timekeeper.data.PurchaseStateManager
 import com.example.timekeeper.data.StripeRepository
-import com.example.timekeeper.data.AccessibilityServiceMonitor
 import com.example.timekeeper.data.api.TimekeeperApiService
 import dagger.Module
 import dagger.Provides
@@ -17,6 +17,12 @@ import javax.inject.Singleton
 @Module
 @InstallIn(SingletonComponent::class)
 object RepositoryModule {
+
+    @Provides
+    @Singleton
+    fun provideSharedPreferences(@ApplicationContext context: Context): SharedPreferences {
+        return context.getSharedPreferences("TimekeeperPrefs", Context.MODE_PRIVATE)
+    }
 
     @Provides
     @Singleton
@@ -43,11 +49,5 @@ object RepositoryModule {
     @Singleton
     fun provideMonitoredAppRepository(@ApplicationContext context: Context): MonitoredAppRepository {
         return MonitoredAppRepository(context)
-    }
-
-    @Provides
-    @Singleton
-    fun provideAccessibilityServiceMonitor(@ApplicationContext context: Context): AccessibilityServiceMonitor {
-        return AccessibilityServiceMonitor(context)
     }
 } 

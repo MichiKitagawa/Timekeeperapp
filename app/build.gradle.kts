@@ -21,12 +21,24 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "com.example.timekeeper.CustomTestRunner"
+        
+        ndk {
+            abiFilters += listOf("x86_64", "arm64-v8a", "x86", "armeabi-v7a")
+        }
     }
     sourceSets {
         getByName("androidTest") {
             manifest.srcFile("src/androidTest/AndroidManifest.xml")
         }
     }
+    
+    // Disable splits for development/debug builds to avoid emulator issues
+    splits {
+        abi {
+            isEnable = false
+        }
+    }
+    
     buildTypes {
         release {
             isMinifyEnabled = false
@@ -36,6 +48,22 @@ android {
             )
         }
     }
+    
+    flavorDimensions += "version"
+    productFlavors {
+        create("development") {
+            dimension = "version"
+            // 開発用：全てのABIを含める（エミュレータ対応）
+        }
+        create("production") {
+            dimension = "version"
+            // プロダクション用：最適化されたABI
+            ndk {
+                abiFilters += listOf("arm64-v8a", "armeabi-v7a")
+            }
+        }
+    }
+    
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11

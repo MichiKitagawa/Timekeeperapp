@@ -23,7 +23,6 @@ import kotlin.math.pow
 
 @Composable
 fun DayPassPurchaseScreen(
-    onPurchaseSuccess: () -> Unit,
     onCancelClick: () -> Unit,
     navController: NavController,
     modifier: Modifier = Modifier,
@@ -115,6 +114,7 @@ fun DayPassPurchaseScreen(
                 factory = { context ->
                     WebView(context).apply {
                         webViewClient = object : WebViewClient() {
+                            @Suppress("OVERRIDE_DEPRECATION")
                             override fun shouldOverrideUrlLoading(view: WebView?, url: String?): Boolean {
                                 url?.let { urlString ->
                                     when {
