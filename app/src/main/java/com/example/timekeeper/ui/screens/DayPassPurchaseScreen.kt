@@ -188,12 +188,7 @@ fun DayPassPurchaseScreen(
             // Stripe決済ボタン
             Button(
                 onClick = {
-                    // isLoading = true
-                    // stripeViewModel.confirmStripePayment(
-                    //     purchaseToken = "test_session_daypass_${System.currentTimeMillis()}",
-                    //     productType = "daypass"
-                    // ) // モック呼び出しからMainActivity経由のコールバック呼び出しへ戻す
-                    onPurchaseDaypassClick(unlockCount) // MainActivityから渡されたコールバックを実行
+                    onPurchaseDaypassClick(unlockCount)
                 },
                 enabled = !isLoading,
                 modifier = Modifier
@@ -213,30 +208,7 @@ fun DayPassPurchaseScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
-            
-            // 開発時のテスト用ボタン
-            OutlinedButton(
-                onClick = {
-                    // テスト用：直接アンロック処理を実行
-                    // stripeViewModel.confirmStripePayment(
-                    //     "test_session_${System.currentTimeMillis()}", 
-                    //     "daypass"
-                    // ) // deviceId が不足しているため、一時的にコメントアウト
-                    android.util.Log.d("DayPassPurchaseScreen", "Test button (confirmStripePayment) is temporarily disabled.")
-                },
-                enabled = !isLoading,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(56.dp)
-            ) {
-                Text(
-                    text = "テスト用（開発時のみ）",
-                    fontSize = 16.sp
-                )
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(32.dp))
 
             OutlinedButton(
                 onClick = onCancelClick,

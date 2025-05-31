@@ -15,9 +15,9 @@ class GapDetector @Inject constructor(
 ) {
     companion object {
         private const val TAG = "GapDetector"
-        private const val NORMAL_INTERVAL = 5 * 60 * 1000L // 5分
-        private const val SUSPICIOUS_GAP_THRESHOLD = 10 * 60 * 1000L // 10分以上で疑わしい
-        private const val SECURITY_BREACH_THRESHOLD = 30 * 60 * 1000L // 30分以上でセキュリティ違反
+        private const val NORMAL_INTERVAL = 1 * 60 * 1000L // 1分
+        private const val SUSPICIOUS_GAP_THRESHOLD = 3 * 60 * 1000L // 3分以上で疑わしい
+        private const val SECURITY_BREACH_THRESHOLD = 5 * 60 * 1000L // 5分以上でセキュリティ違反
     }
 
     private val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())

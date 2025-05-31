@@ -281,7 +281,7 @@ class AppUsageRepository @Inject constructor(
     /**
      * 使用データを読み込み
      */
-    private fun loadUsageData() {
+    fun loadUsageData() {
         val today = dateFormat.format(Date())
         val monitoredApps = getMonitoredApps()
         val usageMap = mutableMapOf<String, AppUsageData>()

@@ -36,6 +36,7 @@ import javax.inject.Inject
 import com.example.timekeeper.service.MyAccessibilityService
 import android.provider.Settings
 import android.text.TextUtils
+import com.example.timekeeper.util.SecurityManager
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
@@ -54,6 +55,9 @@ class MainActivity : ComponentActivity() {
 
     @Inject
     lateinit var heartbeatLogger: HeartbeatLogger
+
+    @Inject
+    lateinit var securityManager: SecurityManager
 
     private val stripeViewModel: StripeViewModel by viewModels()
     private lateinit var appSpecificDeviceId: String
@@ -75,38 +79,7 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun isAccessibilityServiceEnabled(): Boolean {
-        val service = ComponentName(this, MyAccessibilityService::class.java)
-        val accessibilityEnabled = Settings.Secure.getInt(
-            contentResolver,
-            Settings.Secure.ACCESSIBILITY_ENABLED,
-            0
-        )
-        if (accessibilityEnabled == 0) return false
-
-        val settingValue = Settings.Secure.getString(
-            contentResolver,
-            Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
-        )
-        if (settingValue != null) {
-            val splitter = TextUtils.SimpleStringSplitter(':')
-            splitter.setString(settingValue)
-            while (splitter.hasNext()) {
-                val accessibilityService = splitter.next()
-                if (accessibilityService.equals(service.flattenToString(), ignoreCase = true)) {
-                    return true
-                }
-            }
-        }
-        return false
-    }
-
     private fun determineStartDestination(): String {
-        // アクセシビリティサービスが有効でない場合、設定を促す
-        if (!isAccessibilityServiceEnabled()) {
-            return TimekeeperRoutes.ACCESSIBILITY_PROMPT
-        }
-
         // ライセンス購入済みかチェック
         if (!purchaseStateManager.isLicensePurchased()) {
             return TimekeeperRoutes.LICENSE_PURCHASE
@@ -265,8 +238,8 @@ class MainActivity : ComponentActivity() {
                     Toast.LENGTH_LONG
                 ).show()
                 
-                // アプリデータを完全初期化
-                resetAppDataDueToSecurityBreach()
+                // SecurityManagerによるバックグラウンド初期化
+                securityManager.handleHeartbeatGap(breach.gapMinutes)
                 
                 Log.w("MainActivity", "App data has been reset due to security breach")
             }
@@ -277,35 +250,12 @@ class MainActivity : ComponentActivity() {
     
     /**
      * セキュリティ違反によるアプリデータ完全初期化
+     * @deprecated SecurityManager.performBackgroundDataResetを使用してください
      */
+    @Deprecated("Use SecurityManager.performBackgroundDataReset instead")
     private fun resetAppDataDueToSecurityBreach() {
-        try {
-            // 全SharedPreferencesをクリア
-            val timekeeperPrefs = getSharedPreferences("TimekeeperPrefs", Context.MODE_PRIVATE)
-            val monitoredAppPrefs = getSharedPreferences("monitored_apps", Context.MODE_PRIVATE)
-            val appUsagePrefs = getSharedPreferences("app_usage", Context.MODE_PRIVATE)
-            val heartbeatPrefs = getSharedPreferences("heartbeat_log", Context.MODE_PRIVATE)
-            val purchasePrefs = getSharedPreferences("purchase_state", Context.MODE_PRIVATE)
-            
-            timekeeperPrefs.edit().clear().apply()
-            monitoredAppPrefs.edit().clear().apply()
-            appUsagePrefs.edit().clear().apply()
-            heartbeatPrefs.edit().clear().apply()
-            purchasePrefs.edit().clear().apply()
-            
-            // Repository データもクリア
-            purchaseStateManager.clearPurchaseState()
-            monitoredAppRepository.clearAllData()
-            appUsageRepository.clearAllData()
-            heartbeatLogger.clearHeartbeatHistory()
-            
-            // デバイスIDは保持
-            timekeeperPrefs.edit().putString("DEVICE_ID", appSpecificDeviceId).apply()
-            
-            Log.i("MainActivity", "Complete app data reset finished due to security breach")
-        } catch (e: Exception) {
-            Log.e("MainActivity", "Error resetting app data", e)
-        }
+        // 廃止予定：SecurityManagerにロジックを移行済み
+        securityManager.performBackgroundDataReset("Legacy MainActivity call")
     }
     
     /**
