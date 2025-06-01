@@ -19,11 +19,14 @@ from google.cloud import firestore
 
 # 定数を定義
 # YOUR_APP_DOMAIN = "https://example.com" # HTTP/HTTPSのダミードメインに変更
-YOUR_HOSTED_DOMAIN = "https://timekeeper-redirect.example.com" # Stripe決済後の中間ページをホストするドメイン (実際にデプロイするドメインに変更してください)
+YOUR_HOSTED_DOMAIN = "https://v0-timekeeper.vercel.app" # 本番環境用ドメインに変更してください
 LICENSE_PRICE_ID = "price_1RSoQKCplaJfZ2mW9cv8EVSw" # Stripeダッシュボードで設定したライセンス商品の価格ID
 
-# ngrokのURL (開発時に一時的に使用) - 実行の都度変更が必要な場合があります
-YOUR_NGROK_URL = "https://78ac-240b-c020-4b0-ee7b-fc5a-6175-1281-2fe1.ngrok-free.app"
+# 本番環境用ドメイン（YOUR_HOSTED_DOMAINと同じ値に設定）
+YOUR_PRODUCTION_URL = "https://v0-timekeeper.vercel.app"
+
+# 開発環境用 - 本番リリース時はコメントアウト
+# YOUR_NGROK_URL = "https://78ac-240b-c020-4b0-ee7b-fc5a-6175-1281-2fe1.ngrok-free.app"
 
 
 @asynccontextmanager
@@ -122,17 +125,17 @@ async def create_checkout_session(request: CreateCheckoutSessionRequest):
          raise HTTPException(status_code=500, detail={"error_code": "line_items_empty", "message": "No items to purchase."})
 
     try:
-        # success_url と cancel_url を ngrok 経由の中間ページのURLに変更
+        # success_url と cancel_url を本番環境ドメインに変更
         # device_id もクエリパラメータに追加
-        success_url_intermediate = f"{YOUR_NGROK_URL}/checkout-success.html?session_id={{CHECKOUT_SESSION_ID}}&deviceId={request.device_id}&product_type={request.product_type}&status=success"
-        cancel_url_intermediate = f"{YOUR_NGROK_URL}/checkout-cancel.html?deviceId={request.device_id}&product_type={request.product_type}&status=cancel"
+        success_url_intermediate = f"{YOUR_HOSTED_DOMAIN}/payment/success?session_id={{CHECKOUT_SESSION_ID}}&deviceId={request.device_id}&product_type={request.product_type}&status=success"
+        cancel_url_intermediate = f"{YOUR_HOSTED_DOMAIN}/payment/cancel?deviceId={request.device_id}&product_type={request.product_type}&status=cancel"
 
         checkout_session = stripe.checkout.Session.create(
             payment_method_types=['card'],
             line_items=line_items,
             mode='payment',
-            success_url=success_url_intermediate, # 修正
-            cancel_url=cancel_url_intermediate,   # 修正
+            success_url=success_url_intermediate,
+            cancel_url=cancel_url_intermediate,
             metadata={
                 'device_id': request.device_id,
                 'product_type': request.product_type

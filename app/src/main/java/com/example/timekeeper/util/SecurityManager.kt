@@ -21,7 +21,7 @@ class SecurityManager @Inject constructor(
         private const val TAG = "SecurityManager"
         
         // 🔧 デバッグ用フラグ - 本番リリース前にfalseに戻すこと！
-        private const val SECURITY_CHECKS_DISABLED_FOR_DEBUG = true
+        private const val SECURITY_CHECKS_DISABLED_FOR_DEBUG = false
     }
 
     /**

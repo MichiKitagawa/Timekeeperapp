@@ -44,7 +44,7 @@ class HeartbeatService : Service() {
         private const val CHANNEL_NAME = "Timekeeper監視"
         
         // 🔧 デバッグ用フラグ - 本番リリース前にfalseに戻すこと！
-        private const val HEARTBEAT_SERVICE_DISABLED_FOR_DEBUG = true
+        private const val HEARTBEAT_SERVICE_DISABLED_FOR_DEBUG = false
     }
 
     /**

@@ -1,0 +1,42 @@
+# Python関連
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+.env
+.pytest_cache/
+
+# テストファイル
+test_*.py
+*_test.py
+
+# IDE設定
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ログファイル
+*.log
+
+# OS関連
+.DS_Store
+Thumbs.db
+
+# Git関連
+.git/
+.gitignore
+
+# ドキュメント
+README.md
+*.md
+
+# 一時ファイル
+*.tmp
+*.temp 
+
+# Firebase Admin SDK の秘密鍵をビルドに含めない
+timekee-b5863-firebase-adminsdk-*.json

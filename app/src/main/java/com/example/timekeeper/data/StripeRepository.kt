@@ -74,7 +74,9 @@ class StripeRepository(
             try {
                 Log.i(TAG, "Confirming payment for device=$deviceId, token=$purchaseToken, product=$productType")
                 
-                // テスト用セッションIDの場合はモック処理
+                // テスト用セッションIDの場合はモック処理（本番環境では無効）
+                // 本番リリース時はこのブロック全体をコメントアウトしてください
+                /*
                 if (purchaseToken.startsWith("test_session_")) {
                     Log.i(TAG, "Test session detected, using mock payment confirmation")
                     
@@ -97,6 +99,7 @@ class StripeRepository(
                     Log.i(TAG, "Test: Payment confirmed successfully for $productType")
                     return@withContext true
                 }
+                */
                 
                 // 実際のAPI呼び出しを試行
                 try {

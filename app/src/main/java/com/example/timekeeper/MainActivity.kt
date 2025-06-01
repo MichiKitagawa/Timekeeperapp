@@ -63,7 +63,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var appSpecificDeviceId: String
 
     // 🔧 デバッグ用フラグ - 本番リリース前にfalseに戻すこと！
-    private val MAIN_ACTIVITY_SECURITY_DISABLED_FOR_DEBUG = true
+    private val MAIN_ACTIVITY_SECURITY_DISABLED_FOR_DEBUG = false
 
     private val sharedPreferences by lazy {
         getSharedPreferences("TimekeeperPrefs", Context.MODE_PRIVATE)

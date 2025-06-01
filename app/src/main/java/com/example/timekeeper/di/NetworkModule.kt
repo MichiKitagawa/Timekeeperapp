@@ -35,7 +35,7 @@ object NetworkModule {
     @Singleton
     fun provideRetrofit(okHttpClient: OkHttpClient): Retrofit {
         return Retrofit.Builder()
-            .baseUrl("http://10.0.2.2:8000/") // Android Emulator用のローカルホスト
+            .baseUrl("https://timekeeper-backend-827754096486.asia-northeast1.run.app") // 本番環境用APIエンドポイントに変更してください
             .client(okHttpClient)
             .addConverterFactory(GsonConverterFactory.create())
             .build()

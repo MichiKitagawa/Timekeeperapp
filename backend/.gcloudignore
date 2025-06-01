@@ -1,0 +1,29 @@
+# Google Cloud Build用の除外ファイル
+.gcloudignore
+.git
+.gitignore
+
+# Python関連
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+env/
+.env
+.pytest_cache/
+
+# テストファイル
+test_*.py
+*_test.py
+
+# IDE設定
+.vscode/
+.idea/
+
+# ドキュメント
+README.md
+*.md
+
+# ローカル設定ファイル
+.env.local
+.env.development 

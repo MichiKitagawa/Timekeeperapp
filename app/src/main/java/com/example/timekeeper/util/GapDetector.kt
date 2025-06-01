@@ -20,7 +20,7 @@ class GapDetector @Inject constructor(
         private const val SECURITY_BREACH_THRESHOLD = 5 * 60 * 1000L // 5分以上でセキュリティ違反
         
         // 🔧 デバッグ用フラグ - 本番リリース前にfalseに戻すこと！
-        private const val GAP_DETECTION_DISABLED_FOR_DEBUG = true
+        private const val GAP_DETECTION_DISABLED_FOR_DEBUG = false
     }
 
     private val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())

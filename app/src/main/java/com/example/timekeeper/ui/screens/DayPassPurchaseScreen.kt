@@ -38,7 +38,7 @@ fun DayPassPurchaseScreen(
         context.getSharedPreferences("purchase_state", Context.MODE_PRIVATE)
     }
     val currentUnlockCount = sharedPreferences.getInt("daypass_unlock_count", 0)
-    
+
     // 価格計算: 次回購入（現在のカウント+1回目）の価格
     // ¥(200×1.2^currentUnlockCount) - 0回購入済みなら1回目の価格、1回購入済みなら2回目の価格
     val nextPurchaseNumber = currentUnlockCount + 1

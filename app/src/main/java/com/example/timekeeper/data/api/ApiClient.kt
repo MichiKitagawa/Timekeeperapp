@@ -13,7 +13,7 @@ import java.util.concurrent.TimeUnit
  */
 object ApiClient {
     
-    private const val BASE_URL = "https://api.timekeeper.example.com/"
+    private const val BASE_URL = "https://timekeeper-backend-827754096486.asia-northeast1.run.app"
     
     /**
      * Gson インスタンス
