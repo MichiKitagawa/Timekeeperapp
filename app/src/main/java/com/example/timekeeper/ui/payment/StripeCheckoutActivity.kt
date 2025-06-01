@@ -39,8 +39,11 @@ class StripeCheckoutActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        Log.i(TAG, "=== StripeCheckoutActivity onCreate() called ===")
 
         val checkoutUrl = intent.getStringExtra(EXTRA_CHECKOUT_URL)
+        Log.i(TAG, "Checkout URL received: $checkoutUrl")
+        
         if (checkoutUrl == null) {
             Log.e(TAG, "Checkout URL not provided")
             Toast.makeText(this, "決済URLが見つかりません", Toast.LENGTH_SHORT).show()
@@ -52,22 +55,31 @@ class StripeCheckoutActivity : ComponentActivity() {
             TimekeeperTheme {
                 StripeCheckoutScreen(
                     checkoutUrl = checkoutUrl,
-                    onClose = { finish() },
+                    onClose = { 
+                        Log.i(TAG, "=== onClose callback triggered ===")
+                        finish() 
+                    },
                     onPaymentComplete = { sessionId, productType ->
-                        Log.i(TAG, "Payment completed: sessionId=$sessionId, productType=$productType")
+                        Log.i(TAG, "=== onPaymentComplete callback triggered: sessionId=$sessionId, productType=$productType ===")
                         // MainActivityにディープリンクを送信
                         val deepLinkIntent = Intent(Intent.ACTION_VIEW).apply {
                             data = Uri.parse("app://com.example.timekeeper/checkout-success?session_id=$sessionId&product_type=$productType")
-                            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                            // 既存のMainActivityタスクを使用し、新しいタスクは作らない
+                            flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                            // パッケージを明示的に指定して、確実にこのアプリ内でIntent が処理されるようにする
+                            setPackage(packageName)
                         }
                         startActivity(deepLinkIntent)
                         finish()
                     },
                     onPaymentCancelled = {
-                        Log.i(TAG, "Payment cancelled")
+                        Log.i(TAG, "=== onPaymentCancelled callback triggered ===")
                         val deepLinkIntent = Intent(Intent.ACTION_VIEW).apply {
                             data = Uri.parse("app://com.example.timekeeper/checkout-cancel")
-                            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                            // 既存のMainActivityタスクを使用し、新しいタスクは作らない
+                            flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                            // パッケージを明示的に指定
+                            setPackage(packageName)
                         }
                         startActivity(deepLinkIntent)
                         finish()
@@ -75,6 +87,33 @@ class StripeCheckoutActivity : ComponentActivity() {
                 )
             }
         }
+        
+        Log.i(TAG, "=== StripeCheckoutActivity onCreate() completed ===")
+    }
+    
+    override fun onStart() {
+        super.onStart()
+        Log.i(TAG, "=== StripeCheckoutActivity onStart() ===")
+    }
+    
+    override fun onResume() {
+        super.onResume()
+        Log.i(TAG, "=== StripeCheckoutActivity onResume() ===")
+    }
+    
+    override fun onPause() {
+        super.onPause()
+        Log.i(TAG, "=== StripeCheckoutActivity onPause() ===")
+    }
+    
+    override fun onStop() {
+        super.onStop()
+        Log.i(TAG, "=== StripeCheckoutActivity onStop() ===")
+    }
+    
+    override fun onDestroy() {
+        super.onDestroy()
+        Log.i(TAG, "=== StripeCheckoutActivity onDestroy() ===")
     }
 }
 
@@ -87,6 +126,7 @@ fun StripeCheckoutScreen(
     onPaymentCancelled: () -> Unit
 ) {
     var isLoading by remember { mutableStateOf(true) }
+    var pageLoadCompleted by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier.fillMaxSize()
@@ -123,47 +163,99 @@ fun StripeCheckoutScreen(
                                 super.onPageStarted(view, url, favicon)
                                 Log.d("StripeCheckoutActivity", "Page started loading: $url")
                                 isLoading = true
+                                pageLoadCompleted = false
                             }
 
                             override fun onPageFinished(view: WebView?, url: String?) {
                                 super.onPageFinished(view, url)
                                 Log.d("StripeCheckoutActivity", "Page finished loading: $url")
                                 isLoading = false
+                                
+                                // ページ読み込み完了後、少し待機してからディープリンク処理を有効にする
+                                android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                                    pageLoadCompleted = true
+                                    Log.i("StripeCheckoutActivity", "=== Deep link processing enabled ===")
+                                }, 2000) // 2秒待機
                             }
 
                             @Suppress("OVERRIDE_DEPRECATION")
                             override fun onReceivedError(view: WebView?, errorCode: Int, description: String?, failingUrl: String?) {
                                 super.onReceivedError(view, errorCode, description, failingUrl)
                                 Log.e("StripeCheckoutActivity", "WebView error: $errorCode - $description for URL: $failingUrl")
+                                
+                                // ERR_UNKNOWN_URL_SCHEME (-10) でapp://スキームの場合は最後のチャンスとして処理
+                                if (errorCode == -10 && failingUrl?.startsWith("app://com.example.timekeeper") == true) {
+                                    Log.i("StripeCheckoutActivity", "=== Handling app:// scheme in onReceivedError as fallback ===")
+                                    
+                                    val uri = Uri.parse(failingUrl)
+                                    val pathSegments = uri.pathSegments
+                                    
+                                    if (pathSegments.contains("checkout-success")) {
+                                        val sessionId = uri.getQueryParameter("session_id")
+                                        val productType = uri.getQueryParameter("product_type")
+                                        Log.i("StripeCheckoutActivity", "Fallback processing: Session ID: $sessionId, Product Type: $productType")
+                                        
+                                        if (sessionId != null && productType != null) {
+                                            Log.i("StripeCheckoutActivity", "=== Calling onPaymentComplete from fallback ===")
+                                            onPaymentComplete(sessionId, productType)
+                                            return
+                                        }
+                                    } else if (pathSegments.contains("checkout-cancel")) {
+                                        Log.i("StripeCheckoutActivity", "=== Calling onPaymentCancelled from fallback ===")
+                                        onPaymentCancelled()
+                                        return
+                                    }
+                                }
+                                
                                 isLoading = false
                             }
 
                             @Suppress("OVERRIDE_DEPRECATION")
                             override fun shouldOverrideUrlLoading(view: WebView?, url: String?): Boolean {
-                                Log.d("StripeCheckoutActivity", "URL loading: $url")
+                                Log.i("StripeCheckoutActivity", "=== shouldOverrideUrlLoading called ===")
+                                Log.i("StripeCheckoutActivity", "URL loading: $url")
+                                Log.i("StripeCheckoutActivity", "Page load completed: $pageLoadCompleted")
                                 
                                 url?.let { urlString ->
                                     val uri = Uri.parse(urlString)
+                                    Log.i("StripeCheckoutActivity", "Parsed URI - scheme: ${uri.scheme}, host: ${uri.host}, path: ${uri.path}")
+                                    Log.i("StripeCheckoutActivity", "Path segments: ${uri.pathSegments}")
                                     
-                                    // ディープリンクをチェック
+                                    // app://スキームのディープリンクは常に処理（pageLoadCompletedに関係なく）
                                     if (uri.scheme == "app" && uri.host == "com.example.timekeeper") {
+                                        Log.i("StripeCheckoutActivity", "=== Deep link detected! Processing immediately ===")
                                         val pathSegments = uri.pathSegments
                                         
                                         if (pathSegments.contains("checkout-success")) {
+                                            Log.i("StripeCheckoutActivity", "=== Checkout success deep link ===")
                                             val sessionId = uri.getQueryParameter("session_id")
                                             val productType = uri.getQueryParameter("product_type")
+                                            Log.i("StripeCheckoutActivity", "Session ID: $sessionId, Product Type: $productType")
                                             
                                             if (sessionId != null && productType != null) {
+                                                Log.i("StripeCheckoutActivity", "=== Calling onPaymentComplete ===")
                                                 onPaymentComplete(sessionId, productType)
                                                 return true
                                             }
                                         } else if (pathSegments.contains("checkout-cancel")) {
+                                            Log.i("StripeCheckoutActivity", "=== Checkout cancel deep link ===")
+                                            Log.i("StripeCheckoutActivity", "=== Calling onPaymentCancelled ===")
                                             onPaymentCancelled()
                                             return true
                                         }
                                     }
+                                    
+                                    // 通常のHTTPSページの場合はページ読み込み完了を待つ
+                                    if (uri.scheme == "https") {
+                                        // ページ読み込みが完了していない場合はディープリンク処理をスキップ
+                                        if (!pageLoadCompleted) {
+                                            Log.i("StripeCheckoutActivity", "=== HTTPS page not fully loaded yet, allowing normal loading ===")
+                                            return false
+                                        }
+                                    }
                                 }
                                 
+                                Log.i("StripeCheckoutActivity", "=== No deep link detected, proceeding with normal URL loading ===")
                                 return false
                             }
                         }

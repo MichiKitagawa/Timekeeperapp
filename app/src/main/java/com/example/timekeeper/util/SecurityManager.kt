@@ -19,6 +19,20 @@ class SecurityManager @Inject constructor(
 ) {
     companion object {
         private const val TAG = "SecurityManager"
+        
+        // 🔧 デバッグ用フラグ - 本番リリース前にfalseに戻すこと！
+        private const val SECURITY_CHECKS_DISABLED_FOR_DEBUG = true
+    }
+
+    /**
+     * デバッグ用：セキュリティチェックが無効化されているかを確認
+     */
+    private fun isSecurityDisabledForDebug(): Boolean {
+        if (SECURITY_CHECKS_DISABLED_FOR_DEBUG) {
+            Log.w(TAG, "⚠️ SECURITY CHECKS ARE DISABLED FOR DEBUG! This should only be used in development.")
+            return true
+        }
+        return false
     }
 
     /**
@@ -26,6 +40,12 @@ class SecurityManager @Inject constructor(
      * 不正検知時に即座に実行される
      */
     fun performBackgroundDataReset(reason: String) {
+        // デバッグモード時はセキュリティリセットを無効化
+        if (isSecurityDisabledForDebug()) {
+            Log.w(TAG, "🔧 DEBUG MODE: Security reset skipped. Reason: $reason")
+            return
+        }
+        
         try {
             Log.w(TAG, "🚨 Performing BACKGROUND data reset. Reason: $reason")
             
@@ -76,6 +96,12 @@ class SecurityManager @Inject constructor(
      * アクセシビリティサービス無効化検知時の処理
      */
     fun handleAccessibilityDisabled() {
+        // デバッグモード時はスキップ
+        if (isSecurityDisabledForDebug()) {
+            Log.w(TAG, "🔧 DEBUG MODE: Accessibility disabled handler skipped")
+            return
+        }
+        
         Log.w(TAG, "🚨 Accessibility service disabled - initiating background reset")
         performBackgroundDataReset("Accessibility service disabled")
     }
@@ -84,6 +110,12 @@ class SecurityManager @Inject constructor(
      * ハートビートギャップ検知時の処理
      */
     fun handleHeartbeatGap(gapMinutes: Long) {
+        // デバッグモード時はスキップ
+        if (isSecurityDisabledForDebug()) {
+            Log.w(TAG, "🔧 DEBUG MODE: Heartbeat gap handler skipped (${gapMinutes} minutes)")
+            return
+        }
+        
         Log.w(TAG, "🚨 Heartbeat gap detected: ${gapMinutes} minutes - initiating background reset")
         performBackgroundDataReset("Heartbeat gap: ${gapMinutes} minutes")
     }

@@ -42,12 +42,40 @@ class HeartbeatService : Service() {
         private const val NOTIFICATION_ID = 1001
         private const val CHANNEL_ID = "heartbeat_channel"
         private const val CHANNEL_NAME = "Timekeeper監視"
+        
+        // 🔧 デバッグ用フラグ - 本番リリース前にfalseに戻すこと！
+        private const val HEARTBEAT_SERVICE_DISABLED_FOR_DEBUG = true
+    }
+
+    /**
+     * デバッグ用：ハートビートサービスが無効化されているかを確認
+     */
+    private fun isHeartbeatServiceDisabledForDebug(): Boolean {
+        if (HEARTBEAT_SERVICE_DISABLED_FOR_DEBUG) {
+            Log.w(TAG, "🔧 HEARTBEAT SERVICE IS DISABLED FOR DEBUG! This should only be used in development.")
+            return true
+        }
+        return false
     }
 
     private val heartbeatTask = object : Runnable {
         override fun run() {
             if (isRunning) {
                 try {
+                    // デバッグモード時はセキュリティチェックをスキップ
+                    if (isHeartbeatServiceDisabledForDebug()) {
+                        Log.d(TAG, "🔧 DEBUG MODE: Security checks skipped, only recording heartbeat")
+                        
+                        // ハートビート記録のみ実行
+                        heartbeatLogger.recordHeartbeat()
+                        
+                        // 次回実行をスケジュール
+                        handler.postDelayed(this, heartbeatInterval)
+                        
+                        Log.d(TAG, "💓 Debug heartbeat recorded, next in ${heartbeatInterval / 1000}秒")
+                        return
+                    }
+                    
                     // 1. アクセシビリティサービス状態をチェック
                     if (!isAccessibilityServiceEnabled()) {
                         Log.w(TAG, "🚨 Accessibility service is DISABLED - triggering security reset")
@@ -89,6 +117,10 @@ class HeartbeatService : Service() {
     override fun onCreate() {
         super.onCreate()
         Log.i(TAG, "🔧 HeartbeatService created")
+        
+        if (isHeartbeatServiceDisabledForDebug()) {
+            Log.w(TAG, "🔧 DEBUG MODE: HeartbeatService running in debug mode (security disabled)")
+        }
         
         createNotificationChannel()
     }

@@ -31,13 +31,18 @@ fun DayPassPurchaseScreen(
     viewModel: DayPassPurchaseViewModel = hiltViewModel()
 ) {
     val context = LocalContext.current
+    
+    // PurchaseStateManagerを注入して使用する方が良いが、
+    // 一旦SharedPreferencesから直接取得して一貫性を保つ
     val sharedPreferences = remember {
-        context.getSharedPreferences("TimekeeperPrefs", Context.MODE_PRIVATE)
+        context.getSharedPreferences("purchase_state", Context.MODE_PRIVATE)
     }
-    val unlockCount = sharedPreferences.getInt("UNLOCK_COUNT", 0)
-
-    // 価格計算: ¥(200×1.2^unlock_count)
-    val price = (200 * 1.2.pow(unlockCount.toDouble())).toInt()
+    val currentUnlockCount = sharedPreferences.getInt("daypass_unlock_count", 0)
+    
+    // 価格計算: 次回購入（現在のカウント+1回目）の価格
+    // ¥(200×1.2^currentUnlockCount) - 0回購入済みなら1回目の価格、1回購入済みなら2回目の価格
+    val nextPurchaseNumber = currentUnlockCount + 1
+    val price = (200 * 1.2.pow(currentUnlockCount.toDouble())).toInt()
 
     var isLoading by remember { mutableStateOf(false) }
     var showWebView by remember { mutableStateOf(false) }
@@ -142,6 +147,8 @@ fun DayPassPurchaseScreen(
                                 return false
                             }
                         }
+                        
+                        // WebView設定の改善
                         settings.javaScriptEnabled = true
                         settings.domStorageEnabled = true
                     }
@@ -174,8 +181,45 @@ fun DayPassPurchaseScreen(
                 text = "今日1日だけ制限解除",
                 fontSize = 18.sp,
                 textAlign = TextAlign.Center,
-                modifier = Modifier.padding(bottom = 32.dp)
+                modifier = Modifier.padding(bottom = 16.dp)
             )
+            
+            // 購入回数とその説明を表示
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 24.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant
+                )
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        text = "${nextPurchaseNumber}回目の購入",
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    if (currentUnlockCount > 0) {
+                        Text(
+                            text = "過去に${currentUnlockCount}回購入済み",
+                            fontSize = 14.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 4.dp)
+                        )
+                    }
+                    Text(
+                        text = "購入回数に応じて価格が変動します（20%ずつ増加）",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(top = 8.dp)
+                    )
+                }
+            }
 
             Text(
                 text = "¥$price",
@@ -188,7 +232,7 @@ fun DayPassPurchaseScreen(
             // Stripe決済ボタン
             Button(
                 onClick = {
-                    onPurchaseDaypassClick(unlockCount)
+                    onPurchaseDaypassClick(currentUnlockCount)
                 },
                 enabled = !isLoading,
                 modifier = Modifier

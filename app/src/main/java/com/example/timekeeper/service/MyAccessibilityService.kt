@@ -27,15 +27,33 @@ class MyAccessibilityService : AccessibilityService() {
     private var usageTrackingRunnable: Runnable? = null
     private val blockedApps = mutableSetOf<String>() // 制限中のアプリ一覧
     private var continuousBlockingRunnable: Runnable? = null
+    private var dailyResetCheckRunnable: Runnable? = null // 日次リセットチェック用
 
     companion object {
         private const val TAG = "MyAccessibilityService"
-        private const val USAGE_TRACKING_INTERVAL = 5000L // 5秒間隔
+        private const val USAGE_TRACKING_INTERVAL = 60000L // 1分間隔（ミリ秒）
+        private const val CONTINUOUS_BLOCKING_INTERVAL = 500L // 0.5秒間隔（ミリ秒）
+        private const val DAILY_RESET_CHECK_INTERVAL = 1800000L // 30分間隔（ミリ秒）
         
         @Volatile
         private var instance: MyAccessibilityService? = null
         
         fun getInstance(): MyAccessibilityService? = instance
+        
+        /**
+         * 外部から日次リセット通知を行う静的メソッド
+         * AppUsageRepositoryから確実に呼び出せるように用意
+         */
+        fun notifyDailyReset() {
+            Log.i(TAG, "🔄 notifyDailyReset static method called")
+            val serviceInstance = getInstance()
+            if (serviceInstance != null) {
+                serviceInstance.clearAllBlockedApps()
+                Log.i(TAG, "🔄 Successfully notified service instance about daily reset")
+            } else {
+                Log.w(TAG, "🔄 Service instance is null, cannot clear blocked apps")
+            }
+        }
     }
 
     override fun onServiceConnected() {
@@ -52,6 +70,9 @@ class MyAccessibilityService : AccessibilityService() {
         
         // 日次リセット処理を実行
         appUsageRepository.performDailyReset()
+        
+        // 定期的な日次リセットチェックを開始（1時間ごと）
+        startDailyResetChecker()
         
         // 監視対象アプリを確認し、既に制限超過しているアプリをブロック
         val monitoredApps = monitoredAppRepository.monitoredApps.value
@@ -356,6 +377,24 @@ class MyAccessibilityService : AccessibilityService() {
         Log.i(TAG, "🎉 Day pass purchased for all ${monitoredApps.size} monitored apps")
     }
 
+    /**
+     * 日次リセット時に全てのブロック状態をクリア
+     */
+    fun clearAllBlockedApps() {
+        Log.i(TAG, "🔄 clearAllBlockedApps called - daily reset detected")
+        Log.i(TAG, "🔄 Current blocked apps before reset: ${blockedApps.toList()}")
+        
+        // 全てのブロック状態をクリア
+        blockedApps.clear()
+        
+        // 継続的なブロック監視も停止
+        stopContinuousBlocking()
+        
+        Log.i(TAG, "🔄 All blocked apps cleared due to daily reset")
+        Log.i(TAG, "🔄 Blocked apps after reset: ${blockedApps.toList()}")
+        Log.i(TAG, "🔄 Users can now access all apps again")
+    }
+
     override fun onInterrupt() {
         Log.w(TAG, "Accessibility service interrupted")
         stopUsageTracking()
@@ -408,6 +447,7 @@ class MyAccessibilityService : AccessibilityService() {
         
         stopUsageTracking()
         stopContinuousBlocking()
+        stopDailyResetChecker()
     }
 
     override fun onUnbind(intent: Intent?): Boolean {
@@ -416,8 +456,45 @@ class MyAccessibilityService : AccessibilityService() {
         // 他のリソースクリーンアップ
         stopUsageTracking()
         stopContinuousBlocking()
+        stopDailyResetChecker()
         
         instance = null
         return super.onUnbind(intent)
+    }
+
+    /**
+     * 日次リセットの定期チェックを開始
+     */
+    private fun startDailyResetChecker() {
+        Log.i(TAG, "Starting daily reset checker (interval: ${DAILY_RESET_CHECK_INTERVAL}ms)")
+        
+        dailyResetCheckRunnable = object : Runnable {
+            override fun run() {
+                Log.d(TAG, "Performing scheduled daily reset check")
+                try {
+                    appUsageRepository.performDailyReset()
+                    Log.d(TAG, "Daily reset check completed successfully")
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error during daily reset check", e)
+                }
+                
+                // 次のチェックをスケジュール
+                handler.postDelayed(this, DAILY_RESET_CHECK_INTERVAL)
+            }
+        }
+        
+        handler.postDelayed(dailyResetCheckRunnable!!, DAILY_RESET_CHECK_INTERVAL)
+        Log.i(TAG, "Daily reset checker started")
+    }
+
+    /**
+     * 日次リセットの定期チェックを停止
+     */
+    private fun stopDailyResetChecker() {
+        dailyResetCheckRunnable?.let {
+            handler.removeCallbacks(it)
+            dailyResetCheckRunnable = null
+            Log.d(TAG, "Stopped daily reset checker")
+        }
     }
 } 

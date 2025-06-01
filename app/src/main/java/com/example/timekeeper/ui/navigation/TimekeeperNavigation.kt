@@ -14,11 +14,13 @@ import com.example.timekeeper.ui.screens.ErrorType
 import com.example.timekeeper.ui.screens.LicenseScreen
 import com.example.timekeeper.ui.screens.LockScreen
 import com.example.timekeeper.ui.screens.MonitoringSetupScreen
+import com.example.timekeeper.ui.screens.SetupAndLicenseScreen
 import kotlin.math.pow
 import com.example.timekeeper.viewmodel.StripeViewModel
 
 // ナビゲーションルート定義
 object TimekeeperRoutes {
+    const val SETUP_AND_LICENSE = "setup_and_license"
     const val ACCESSIBILITY_PROMPT = "accessibility_prompt"
     const val LICENSE_PURCHASE = "license_purchase"
     const val MONITORING_SETUP = "monitoring_setup"
@@ -31,7 +33,7 @@ object TimekeeperRoutes {
 @Composable
 fun TimekeeperNavigation(
     navController: NavHostController = rememberNavController(),
-    startDestination: String = TimekeeperRoutes.ACCESSIBILITY_PROMPT,
+    startDestination: String = TimekeeperRoutes.SETUP_AND_LICENSE,
     modifier: Modifier = Modifier,
     stripeViewModel: StripeViewModel,
     onPurchaseLicenseClick: () -> Unit = {},
@@ -42,18 +44,31 @@ fun TimekeeperNavigation(
         startDestination = startDestination,
         modifier = modifier
     ) {
-        // アクセシビリティサービス設定画面
+        // 統合セットアップ・ライセンス購入画面
+        composable(TimekeeperRoutes.SETUP_AND_LICENSE) {
+            SetupAndLicenseScreen(
+                stripeViewModel = stripeViewModel,
+                onNavigateToMonitoringSetup = {
+                    navController.navigate(TimekeeperRoutes.MONITORING_SETUP) {
+                        popUpTo(TimekeeperRoutes.SETUP_AND_LICENSE) { inclusive = true }
+                    }
+                },
+                onPurchaseLicenseClick = onPurchaseLicenseClick
+            )
+        }
+        
+        // アクセシビリティサービス設定画面 (既存との互換性のために残す)
         composable(TimekeeperRoutes.ACCESSIBILITY_PROMPT) {
             AccessibilityPromptScreen(
                 onAccessibilityEnabled = {
-                    navController.navigate(TimekeeperRoutes.LICENSE_PURCHASE) {
+                    navController.navigate(TimekeeperRoutes.SETUP_AND_LICENSE) {
                         popUpTo(TimekeeperRoutes.ACCESSIBILITY_PROMPT) { inclusive = true }
                     }
                 }
             )
         }
         
-        // ライセンス購入画面
+        // ライセンス購入画面 (既存との互換性のために残す)
         composable(TimekeeperRoutes.LICENSE_PURCHASE) {
             LicenseScreen(
                 stripeViewModel = stripeViewModel,
@@ -126,7 +141,7 @@ fun TimekeeperNavigation(
                 onActionClick = {
                     when (errorType) {
                         ErrorType.LICENSE_REQUIRED -> {
-                            navController.navigate(TimekeeperRoutes.LICENSE_PURCHASE) {
+                            navController.navigate(TimekeeperRoutes.SETUP_AND_LICENSE) {
                                 popUpTo(0) { inclusive = true }
                             }
                         }
@@ -137,7 +152,7 @@ fun TimekeeperNavigation(
                             navController.popBackStack()
                         }
                         ErrorType.PAYMENT_VERIFICATION_FAILED -> {
-                            navController.navigate(TimekeeperRoutes.LICENSE_PURCHASE) {
+                            navController.navigate(TimekeeperRoutes.SETUP_AND_LICENSE) {
                                 popUpTo(0) { inclusive = true }
                             }
                         }

@@ -53,10 +53,24 @@ class MonitoringSetupViewModel @Inject constructor(
     }
 
     /**
-     * 監視対象アプリを削除
+     * 監視対象アプリを削除（機能無効化）
+     * 
+     * 注意: 一度設定したアプリの制限は削除できません。
+     * この機能は無効化されています。
      */
     fun removeMonitoredApp(packageName: String) {
-        Log.d(TAG, "Removing monitored app: $packageName")
-        monitoredAppRepository.removeMonitoredApp(packageName)
+        Log.w(TAG, "Removing monitored app is disabled: $packageName")
+        // 削除機能は無効化されています
+        // monitoredAppRepository.removeMonitoredApp(packageName)
+    }
+
+    /**
+     * 監視対象アプリの目標時間を更新
+     * 
+     * 注意: 目標時間は短縮のみ可能です。
+     */
+    fun updateMonitoredAppTarget(packageName: String, newTargetLimit: Int): Boolean {
+        Log.d(TAG, "Updating target limit for $packageName to $newTargetLimit minutes")
+        return monitoredAppRepository.updateMonitoredAppTarget(packageName, newTargetLimit)
     }
 } 

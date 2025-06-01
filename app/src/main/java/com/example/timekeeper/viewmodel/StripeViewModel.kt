@@ -35,14 +35,19 @@ class StripeViewModel @Inject constructor(
     fun startStripeCheckout(deviceId: String, productType: String, unlockCount: Int?) {
         viewModelScope.launch {
             _paymentUiState.value = PaymentUiState.Loading
-            Log.d("StripeViewModel", "startStripeCheckout called with deviceId: $deviceId")
+            Log.d("StripeViewModel", "startStripeCheckout called with deviceId: $deviceId, productType: $productType, unlockCount: $unlockCount")
             
-            // デイパスの場合、現在のunlock_countを取得
+            // デイパスの場合、UI側から渡されたunlock_countを使用
+            // （UI側で現在の購入回数を正しく取得して渡している前提）
             val actualUnlockCount = if (productType == "daypass") {
-                purchaseStateManager.getDaypassUnlockCount()
+                val passedCount = unlockCount ?: 0
+                Log.d("StripeViewModel", "Daypass: Using unlock count from UI: $passedCount")
+                passedCount
             } else {
                 unlockCount
             }
+            
+            Log.d("StripeViewModel", "Final unlock count to be sent to server: $actualUnlockCount")
             
             val checkoutUrl = stripeRepository.createCheckoutSession(deviceId, productType, actualUnlockCount)
             if (checkoutUrl != null) {
@@ -74,14 +79,24 @@ class StripeViewModel @Inject constructor(
     fun confirmStripePayment(deviceId: String, purchaseToken: String, productType: String) {
         viewModelScope.launch {
             _paymentUiState.value = PaymentUiState.Loading
-            Log.d("StripeViewModel", "confirmStripePayment called with deviceId: $deviceId, token: $purchaseToken")
+            Log.d("StripeViewModel", "confirmStripePayment called with deviceId: $deviceId, token: $purchaseToken, productType: $productType")
             val success = stripeRepository.confirmPayment(deviceId, purchaseToken, productType)
             if (success) {
                 _paymentUiState.value = PaymentUiState.Success("Payment confirmed successfully for $productType!")
+                Log.i("StripeViewModel", "Payment confirmation successful for $productType")
                 // 購入状態の更新はStripeRepository内で行われるため、ここでは追加処理は不要
             } else {
                 _paymentUiState.value = PaymentUiState.Error("Failed to confirm payment for $productType.")
+                Log.e("StripeViewModel", "Payment confirmation failed for $productType")
             }
         }
+    }
+
+    /**
+     * 決済状態をリセットします（処理完了後にUIから呼び出される想定）
+     */
+    fun resetPaymentState() {
+        _paymentUiState.value = PaymentUiState.Idle
+        Log.d("StripeViewModel", "Payment state reset to Idle")
     }
 } 

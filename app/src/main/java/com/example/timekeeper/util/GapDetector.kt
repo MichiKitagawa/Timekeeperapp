@@ -18,9 +18,23 @@ class GapDetector @Inject constructor(
         private const val NORMAL_INTERVAL = 1 * 60 * 1000L // 1分
         private const val SUSPICIOUS_GAP_THRESHOLD = 3 * 60 * 1000L // 3分以上で疑わしい
         private const val SECURITY_BREACH_THRESHOLD = 5 * 60 * 1000L // 5分以上でセキュリティ違反
+        
+        // 🔧 デバッグ用フラグ - 本番リリース前にfalseに戻すこと！
+        private const val GAP_DETECTION_DISABLED_FOR_DEBUG = true
     }
 
     private val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
+
+    /**
+     * デバッグ用：ギャップ検知が無効化されているかを確認
+     */
+    private fun isGapDetectionDisabledForDebug(): Boolean {
+        if (GAP_DETECTION_DISABLED_FOR_DEBUG) {
+            Log.w(TAG, "🔧 GAP DETECTION IS DISABLED FOR DEBUG! This should only be used in development.")
+            return true
+        }
+        return false
+    }
 
     /**
      * セキュリティ違反データクラス
@@ -43,6 +57,12 @@ class GapDetector @Inject constructor(
      * 疑わしいギャップをチェック
      */
     fun checkForSuspiciousGaps(): SecurityBreach? {
+        // デバッグモード時はギャップ検知を無効化
+        if (isGapDetectionDisabledForDebug()) {
+            Log.d(TAG, "🔧 DEBUG MODE: Gap detection skipped")
+            return null
+        }
+        
         val lastHeartbeat = heartbeatLogger.getLastHeartbeat()
         val currentTime = System.currentTimeMillis()
         
@@ -95,6 +115,12 @@ class GapDetector @Inject constructor(
      * ハートビート履歴全体を分析して異常なパターンを検出
      */
     fun analyzeHeartbeatPattern(): List<SecurityBreach> {
+        // デバッグモード時はパターン分析を無効化
+        if (isGapDetectionDisabledForDebug()) {
+            Log.d(TAG, "🔧 DEBUG MODE: Pattern analysis skipped")
+            return emptyList()
+        }
+        
         val history = heartbeatLogger.getHeartbeatHistory()
         val breaches = mutableListOf<SecurityBreach>()
         

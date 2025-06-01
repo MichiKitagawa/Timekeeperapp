@@ -62,6 +62,9 @@ class MainActivity : ComponentActivity() {
     private val stripeViewModel: StripeViewModel by viewModels()
     private lateinit var appSpecificDeviceId: String
 
+    // 🔧 デバッグ用フラグ - 本番リリース前にfalseに戻すこと！
+    private val MAIN_ACTIVITY_SECURITY_DISABLED_FOR_DEBUG = true
+
     private val sharedPreferences by lazy {
         getSharedPreferences("TimekeeperPrefs", Context.MODE_PRIVATE)
     }
@@ -82,7 +85,7 @@ class MainActivity : ComponentActivity() {
     private fun determineStartDestination(): String {
         // ライセンス購入済みかチェック
         if (!purchaseStateManager.isLicensePurchased()) {
-            return TimekeeperRoutes.LICENSE_PURCHASE
+            return TimekeeperRoutes.SETUP_AND_LICENSE
         }
 
         // 監視対象アプリが設定されているかチェック
@@ -137,12 +140,14 @@ class MainActivity : ComponentActivity() {
                 LaunchedEffect(paymentUiState) {
                     when (val state = paymentUiState) {
                         is com.example.timekeeper.viewmodel.PaymentUiState.Success -> {
+                            Log.i("MainActivity", "Payment success state detected: ${state.message}")
                             Toast.makeText(context, state.message, Toast.LENGTH_LONG).show()
                             
                             if (state.message.contains("license")) {
+                                Log.i("MainActivity", "License purchase successful, navigating to monitoring setup")
                                 // ライセンス購入成功時はアプリ設定画面へ
                                 navController.navigate(TimekeeperRoutes.MONITORING_SETUP) {
-                                    popUpTo(TimekeeperRoutes.LICENSE_PURCHASE) { inclusive = true }
+                                    popUpTo(TimekeeperRoutes.SETUP_AND_LICENSE) { inclusive = true }
                                 }
                             } else if (state.message.contains("daypass")) {
                                 // デイパス購入成功時の処理
@@ -150,6 +155,7 @@ class MainActivity : ComponentActivity() {
                                 
                                 // 全ての監視対象アプリにデイパスを適用
                                 appUsageRepository.purchaseDayPassForAllApps()
+                                Log.i("MainActivity", "Day pass applied to all monitored apps")
                                 
                                 // アクセシビリティサービスにブロック解除を通知
                                 try {
@@ -161,21 +167,34 @@ class MainActivity : ComponentActivity() {
                                         val onDayPassPurchasedMethod = serviceClass.getMethod("onDayPassPurchasedForAllApps")
                                         onDayPassPurchasedMethod.invoke(serviceInstance)
                                         Log.i("MainActivity", "Successfully notified accessibility service about day pass purchase")
+                                    } else {
+                                        Log.w("MainActivity", "Accessibility service instance is null - service may not be running")
                                     }
                                 } catch (e: Exception) {
-                                    Log.e("MainActivity", "Failed to notify accessibility service", e)
+                                    Log.e("MainActivity", "Failed to notify accessibility service about day pass purchase", e)
                                 }
                                 
+                                Log.i("MainActivity", "Navigating to dashboard after successful day pass purchase")
                                 // ダッシュボードに戻る
                                 navController.navigate(TimekeeperRoutes.DASHBOARD) {
                                     popUpTo(TimekeeperRoutes.DAY_PASS_PURCHASE) { inclusive = true }
                                 }
                             }
+                            
+                            // 状態をリセット（一度きりの処理として）
+                            // Note: ViewModelにリセットメソッドがある場合は呼び出し
+                            stripeViewModel.resetPaymentState()
                         }
                         is com.example.timekeeper.viewmodel.PaymentUiState.Error -> {
-                            Toast.makeText(context, state.message, Toast.LENGTH_LONG).show()
+                            Log.e("MainActivity", "Payment error state detected: ${state.message}")
+                            Toast.makeText(context, "決済エラー: ${state.message}", Toast.LENGTH_LONG).show()
                         }
-                        else -> { /* Idle or Loading - no action needed */ }
+                        is com.example.timekeeper.viewmodel.PaymentUiState.Loading -> {
+                            Log.d("MainActivity", "Payment loading state detected")
+                        }
+                        else -> { 
+                            Log.d("MainActivity", "Payment state: Idle")
+                        }
                     }
                 }
 
@@ -199,23 +218,47 @@ class MainActivity : ComponentActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        Log.i("MainActivity", "=== onNewIntent called ===")
+        Log.i("MainActivity", "Intent action: ${intent.action}")
+        Log.i("MainActivity", "Intent data: ${intent.data}")
         setIntent(intent)
         handleDeepLink(intent)
     }
 
     private fun handleDeepLink(intent: Intent?) {
+        Log.i("MainActivity", "=== handleDeepLink called ===")
         intent?.data?.let { uri ->
+            Log.i("MainActivity", "Deep link URI: $uri")
+            Log.i("MainActivity", "URI scheme: ${uri.scheme}, host: ${uri.host}")
+            Log.i("MainActivity", "URI path segments: ${uri.pathSegments}")
+            
             if (uri.scheme == "app" && uri.host == "com.example.timekeeper") {
                 val pathSegments = uri.pathSegments
+                Log.i("MainActivity", "Valid deep link detected with path segments: $pathSegments")
+                
                 if (pathSegments.contains("checkout-success")) {
                     val sessionId = uri.getQueryParameter("session_id")
                     val productType = uri.getQueryParameter("product_type")
+                    Log.i("MainActivity", "Checkout success deep link - sessionId: $sessionId, productType: $productType")
+                    
                     if (sessionId != null && productType != null) {
-                        Log.i("MainActivity", "Deep link: Checkout successful! Session ID: $sessionId, Product Type: $productType")
+                        Log.i("MainActivity", "Confirming Stripe payment with sessionId: $sessionId, productType: $productType")
                         stripeViewModel.confirmStripePayment(appSpecificDeviceId, sessionId, productType)
+                    } else {
+                        Log.e("MainActivity", "Missing sessionId or productType in checkout success deep link")
                     }
+                } else if (pathSegments.contains("checkout-cancel")) {
+                    Log.i("MainActivity", "Checkout cancel deep link detected")
+                    // キャンセル時の処理があれば追加
+                    Toast.makeText(this, "決済がキャンセルされました", Toast.LENGTH_SHORT).show()
+                } else {
+                    Log.w("MainActivity", "Unknown deep link path: $pathSegments")
                 }
+            } else {
+                Log.w("MainActivity", "Invalid deep link scheme or host: ${uri.scheme}://${uri.host}")
             }
+        } ?: run {
+            Log.d("MainActivity", "No URI data in intent")
         }
     }
 
@@ -224,6 +267,12 @@ class MainActivity : ComponentActivity() {
      * 不正なサービス停止を検知してアプリを初期化
      */
     private fun performHeartbeatSecurityCheck() {
+        // デバッグモード時はセキュリティチェックをスキップ
+        if (MAIN_ACTIVITY_SECURITY_DISABLED_FOR_DEBUG) {
+            Log.w("MainActivity", "🔧 DEBUG MODE: MainActivity security check skipped")
+            return
+        }
+        
         try {
             Log.i("MainActivity", "Performing heartbeat security check")
             

@@ -11,7 +11,8 @@ import javax.inject.Singleton
 
 @Singleton
 class AppUsageRepository @Inject constructor(
-    private val context: Context
+    private val context: Context,
+    private val monitoredAppRepository: MonitoredAppRepository
 ) {
     private val prefs: SharedPreferences = context.getSharedPreferences("app_usage", Context.MODE_PRIVATE)
     private val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
@@ -27,7 +28,7 @@ class AppUsageRepository @Inject constructor(
     )
     
     init {
-        android.util.Log.d("AppUsageRepository", "AppUsageRepository initialized")
+        android.util.Log.d("AppUsageRepository", "AppUsageRepository initialized with injected MonitoredAppRepository")
         
         // 初期化時に強制制限状態をチェック・クリア
         checkAndClearForceBlocks()
@@ -47,9 +48,8 @@ class AppUsageRepository @Inject constructor(
      * アプリの使用時間が制限を超えているかチェック
      */
     fun isUsageExceeded(packageName: String): Boolean {
-        // まず監視対象アプリかどうかをチェック
-        val monitoredApps = getMonitoredApps()
-        if (!monitoredApps.contains(packageName)) {
+        // MonitoredAppRepositoryインスタンスを使用してチェック
+        if (!monitoredAppRepository.isAppMonitored(packageName)) {
             android.util.Log.d("AppUsageRepository", 
                 "App $packageName is not monitored, no usage limit")
             return false
@@ -58,23 +58,21 @@ class AppUsageRepository @Inject constructor(
         val today = dateFormat.format(Date())
         val usageKey = "${packageName}_usage_$today"
         
-        // MonitoredAppRepositoryのSharedPreferencesから制限値を取得
-        val monitoredAppPrefs = context.getSharedPreferences("monitored_apps", Context.MODE_PRIVATE)
-        val currentLimit = monitoredAppPrefs.getInt("${packageName}_current_limit", -1)
-        
+        // MonitoredAppRepositoryから制限値を取得
+        val currentLimit = getCurrentLimitFromRepo(packageName)
         val todayUsage = prefs.getInt(usageKey, 0)
         
         // 制限が設定されていない場合（-1）は制限なし
         if (currentLimit == -1) {
             android.util.Log.d("AppUsageRepository", 
-                "No limit set for monitored app $packageName in monitored_apps prefs")
+                "No limit set for monitored app $packageName")
             return false
         }
         
         val isExceeded = todayUsage >= currentLimit
         
         android.util.Log.d("AppUsageRepository", 
-            "Usage check for $packageName: usage=$todayUsage, limit=$currentLimit, exceeded=$isExceeded (from monitored_apps prefs)")
+            "Usage check for $packageName: usage=$todayUsage, limit=$currentLimit, exceeded=$isExceeded (from MonitoredAppRepository)")
         
         return isExceeded
     }
@@ -111,28 +109,19 @@ class AppUsageRepository @Inject constructor(
      * アプリの現在の制限時間を取得
      */
     fun getCurrentLimit(packageName: String): Int {
-        // まず監視対象アプリかどうかをチェック
-        val monitoredApps = getMonitoredApps()
-        if (!monitoredApps.contains(packageName)) {
-            android.util.Log.d("AppUsageRepository", 
-                "App $packageName is not monitored, returning unlimited")
-            return Int.MAX_VALUE
-        }
-        
-        // MonitoredAppRepositoryのSharedPreferencesから制限値を取得
-        val monitoredAppPrefs = context.getSharedPreferences("monitored_apps", Context.MODE_PRIVATE)
-        val limit = monitoredAppPrefs.getInt("${packageName}_current_limit", -1)
+        // MonitoredAppRepositoryインスタンスを使用して取得
+        val currentLimit = getCurrentLimitFromRepo(packageName)
         
         // 監視対象として設定されているが制限が設定されていない場合
-        if (limit == -1) {
+        if (currentLimit == -1) {
             android.util.Log.w("AppUsageRepository", 
                 "Monitored app $packageName has no limit set in monitored_apps prefs, returning unlimited")
             return Int.MAX_VALUE
         }
         
         android.util.Log.d("AppUsageRepository", 
-            "Current limit for $packageName: $limit minutes (from monitored_apps prefs)")
-        return limit
+            "Current limit for $packageName: $currentLimit minutes (from MonitoredAppRepository)")
+        return currentLimit
     }
     
     /**
@@ -237,35 +226,163 @@ class AppUsageRepository @Inject constructor(
     
     /**
      * 日次リセット処理（0時に実行）
+     * 
+     * 重要: このメソッドは日付が変わった時に一度だけ実行されます
      */
     fun performDailyReset() {
         val today = dateFormat.format(Date())
         val lastResetDate = prefs.getString("last_reset_date", "")
         
-        android.util.Log.d("AppUsageRepository", "performDailyReset called - today: $today, lastReset: $lastResetDate")
+        android.util.Log.i("AppUsageRepository", "=== DAILY RESET START ===")
+        android.util.Log.i("AppUsageRepository", "performDailyReset called - today: $today, lastReset: $lastResetDate")
         
+        // 日付が変わった場合のみリセット処理を実行
         if (lastResetDate != today) {
-            // 監視対象アプリの制限時間を1分ずつ減らす
             val monitoredApps = getMonitoredApps()
+            android.util.Log.i("AppUsageRepository", "Date changed! Performing daily reset for ${monitoredApps.size} monitored apps")
+            
+            val editor = prefs.edit()
+            val monitoredAppPrefs = context.getSharedPreferences("monitored_apps", Context.MODE_PRIVATE)
+            val monitoredAppEditor = monitoredAppPrefs.edit()
+            
+            // === STEP 1: 全ての監視対象アプリの使用時間をリセット ===
+            android.util.Log.i("AppUsageRepository", "=== Step 1: Resetting usage times ===")
             monitoredApps.forEach { packageName ->
-                val currentLimit = getCurrentLimit(packageName)
-                val targetLimit = prefs.getInt("${packageName}_target_limit", currentLimit)
+                // 今日の使用時間を0にリセット
+                val todayUsageKey = "${packageName}_usage_$today"
+                val previousUsage = prefs.getInt(todayUsageKey, 0)
+                editor.putInt(todayUsageKey, 0)
+                android.util.Log.i("AppUsageRepository", "Reset usage for $packageName: $previousUsage -> 0 minutes (key: $todayUsageKey)")
                 
-                if (currentLimit > targetLimit) {
-                    val newLimit = maxOf(currentLimit - 1, targetLimit)
-                    prefs.edit()
-                        .putInt("${packageName}_current_limit", newLimit)
-                        .apply()
-                    android.util.Log.d("AppUsageRepository", "Reduced limit for $packageName from $currentLimit to $newLimit")
+                // 過去7日分の使用時間データを削除（メモリ節約）
+                for (i in 1..7) {
+                    val pastDay = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).apply {
+                        val cal = Calendar.getInstance()
+                        cal.time = Date()
+                        cal.add(Calendar.DAY_OF_MONTH, -i)
+                        format(cal.time)
+                    }
+                    val pastUsageKey = "${packageName}_usage_$pastDay"
+                    if (prefs.contains(pastUsageKey)) {
+                        editor.remove(pastUsageKey)
+                        android.util.Log.d("AppUsageRepository", "Removed old usage data: $pastUsageKey")
+                    }
                 }
             }
             
-            prefs.edit()
-                .putString("last_reset_date", today)
-                .apply()
+            // === STEP 2: 全てのデイパスを無効化 ===
+            android.util.Log.i("AppUsageRepository", "=== Step 2: Clearing day passes ===")
+            monitoredApps.forEach { packageName ->
+                // 今日のデイパスも含めて全て削除（新しい日なので）
+                val todayDayPassKey = "${packageName}_day_pass_$today"
+                if (prefs.getBoolean(todayDayPassKey, false)) {
+                    editor.remove(todayDayPassKey)
+                    android.util.Log.i("AppUsageRepository", "Cleared today's day pass for $packageName")
+                }
+                
+                // 過去7日分のデイパスも削除
+                for (i in 1..7) {
+                    val pastDay = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).apply {
+                        val cal = Calendar.getInstance()
+                        cal.time = Date()
+                        cal.add(Calendar.DAY_OF_MONTH, -i)
+                        format(cal.time)
+                    }
+                    val pastDayPassKey = "${packageName}_day_pass_$pastDay"
+                    if (prefs.getBoolean(pastDayPassKey, false)) {
+                        editor.remove(pastDayPassKey)
+                        android.util.Log.d("AppUsageRepository", "Cleared old day pass: $pastDayPassKey")
+                    }
+                }
+            }
             
-            android.util.Log.d("AppUsageRepository", "Daily reset completed")
+            // === STEP 3: 監視対象アプリの制限時間を1分ずつ減らす ===
+            android.util.Log.i("AppUsageRepository", "=== Step 3: Reducing time limits ===")
+            var anyLimitChanged = false
+            monitoredApps.forEach { packageName ->
+                val currentLimit = monitoredAppPrefs.getInt("${packageName}_current_limit", -1)
+                val targetLimit = monitoredAppPrefs.getInt("${packageName}_target_limit", -1)
+                
+                android.util.Log.d("AppUsageRepository", "Checking limits for $packageName: current=$currentLimit, target=$targetLimit")
+                
+                if (currentLimit > 0 && targetLimit > 0 && currentLimit > targetLimit) {
+                    val newLimit = maxOf(currentLimit - 1, targetLimit)
+                    monitoredAppEditor.putInt("${packageName}_current_limit", newLimit)
+                    anyLimitChanged = true
+                    android.util.Log.i("AppUsageRepository", "✅ Reduced limit for $packageName: $currentLimit -> $newLimit minutes")
+                } else {
+                    android.util.Log.d("AppUsageRepository", "No limit reduction for $packageName (current=$currentLimit, target=$targetLimit)")
+                }
+            }
+            
+            // === STEP 4: 全ての変更を適用 ===
+            android.util.Log.i("AppUsageRepository", "=== Step 4: Applying all changes ===")
+            
+            // リセット日を記録
+            editor.putString("last_reset_date", today)
+            
+            // 変更をコミット
+            val appUsageSuccess = editor.commit()
+            val monitoredAppSuccess = monitoredAppEditor.commit()
+            
+            android.util.Log.i("AppUsageRepository", "SharedPreferences commit results: appUsage=$appUsageSuccess, monitoredApp=$monitoredAppSuccess")
+            
+            // === STEP 5: データ再読み込みとUI更新 ===
+            android.util.Log.i("AppUsageRepository", "=== Step 5: Reloading data and updating UI ===")
+            
+            // MonitoredAppRepositoryのデータ再読み込み
+            if (anyLimitChanged) {
+                try {
+                    // 保持しているMonitoredAppRepositoryインスタンスから直接データを再読み込み
+                    monitoredAppRepository.loadMonitoredApps()
+                    android.util.Log.i("AppUsageRepository", "✅ MonitoredApp StateFlow reloaded successfully")
+                } catch (e: Exception) {
+                    android.util.Log.e("AppUsageRepository", "❌ Failed to reload MonitoredApp StateFlow", e)
+                }
+                
+                // さらに確実にするため追加の再読み込み
+                try {
+                    // 少し待機してからリフレッシュ（SharedPreferencesの変更が反映されるまで待つ）
+                    Thread.sleep(100)
+                    monitoredAppRepository.loadMonitoredApps()
+                    android.util.Log.i("AppUsageRepository", "✅ Additional MonitoredApp reload completed")
+                } catch (e: Exception) {
+                    android.util.Log.e("AppUsageRepository", "❌ Additional MonitoredApp reload failed", e)
+                }
+            }
+            
+            // 使用データを再読み込み（これによりStateFlowが更新され、UIに反映される）
             loadUsageData()
+            
+            // さらに確実にするため、少し待機してから再度データを読み込み
+            try {
+                Thread.sleep(200)
+                loadUsageData()
+                android.util.Log.i("AppUsageRepository", "✅ Additional AppUsage data reload completed")
+            } catch (e: Exception) {
+                android.util.Log.e("AppUsageRepository", "❌ Additional AppUsage data reload failed", e)
+            }
+            
+            // === STEP 6: MyAccessibilityServiceにリセット完了を通知 ===
+            android.util.Log.i("AppUsageRepository", "=== Step 6: Notifying AccessibilityService ===")
+            try {
+                // Kotlinのcompanion objectメソッドを直接呼び出し
+                com.example.timekeeper.service.MyAccessibilityService.notifyDailyReset()
+                android.util.Log.i("AppUsageRepository", "✅ AccessibilityService notified directly - all blocked apps should be cleared")
+            } catch (e: Exception) {
+                android.util.Log.e("AppUsageRepository", "Failed to notify AccessibilityService directly", e)
+                
+                // フォールバック: AccessibilityServiceが利用できない場合のエラーハンドリング
+                android.util.Log.w("AppUsageRepository", "AccessibilityService notification failed, but daily reset completed successfully")
+            }
+            
+            android.util.Log.i("AppUsageRepository", "=== DAILY RESET COMPLETED SUCCESSFULLY ===")
+            android.util.Log.i("AppUsageRepository", "✅ All data reset: usage=0, day passes cleared, limits reduced")
+            android.util.Log.i("AppUsageRepository", "✅ UI will be updated via StateFlow")
+            android.util.Log.i("AppUsageRepository", "✅ All app blocks cleared")
+            
+        } else {
+            android.util.Log.d("AppUsageRepository", "Daily reset already performed today ($today), skipping")
         }
     }
     
@@ -273,9 +390,33 @@ class AppUsageRepository @Inject constructor(
      * 監視対象アプリ一覧を取得
      */
     private fun getMonitoredApps(): Set<String> {
-        // MonitoredAppRepository専用のSharedPreferencesから取得
-        val monitoredAppPrefs = context.getSharedPreferences("monitored_apps", Context.MODE_PRIVATE)
-        return monitoredAppPrefs.getStringSet("monitored_apps", emptySet()) ?: emptySet()
+        // MonitoredAppRepositoryから監視対象アプリを取得（データソース統一）
+        return monitoredAppRepository.monitoredApps.value.map { it.packageName }.toSet()
+    }
+    
+    /**
+     * MonitoredAppRepositoryから制限値を取得
+     */
+    private fun getCurrentLimitFromRepo(packageName: String): Int {
+        // MonitoredAppRepositoryが監視対象でない場合は無制限
+        if (!monitoredAppRepository.isAppMonitored(packageName)) {
+            android.util.Log.d("AppUsageRepository", 
+                "App $packageName is not monitored, returning unlimited")
+            return Int.MAX_VALUE
+        }
+        
+        val currentLimit = monitoredAppRepository.getCurrentLimit(packageName)
+        
+        // 監視対象として設定されているが制限が設定されていない場合
+        if (currentLimit == -1) {
+            android.util.Log.w("AppUsageRepository", 
+                "Monitored app $packageName has no limit set, returning unlimited")
+            return Int.MAX_VALUE
+        }
+        
+        android.util.Log.d("AppUsageRepository", 
+            "Current limit for $packageName: $currentLimit minutes (from MonitoredAppRepository)")
+        return currentLimit
     }
     
     /**
@@ -286,17 +427,15 @@ class AppUsageRepository @Inject constructor(
         val monitoredApps = getMonitoredApps()
         val usageMap = mutableMapOf<String, AppUsageData>()
         
-        // MonitoredAppRepositoryのSharedPreferencesを取得
-        val monitoredAppPrefs = context.getSharedPreferences("monitored_apps", Context.MODE_PRIVATE)
-        
         android.util.Log.d("AppUsageRepository", "loadUsageData called - today: $today, monitored apps: ${monitoredApps.size}")
         
         monitoredApps.forEach { packageName ->
             val todayUsage = getTodayUsage(packageName)
-            val currentLimit = monitoredAppPrefs.getInt("${packageName}_current_limit", Int.MAX_VALUE)
+            // MonitoredAppRepositoryから制限値を取得（統一）
+            val currentLimit = getCurrentLimitFromRepo(packageName)
             val lastUsed = prefs.getString("${packageName}_last_used", today) ?: today
             
-            android.util.Log.d("AppUsageRepository", "Loading data for $packageName: usage=$todayUsage, limit=$currentLimit (from monitored_apps prefs)")
+            android.util.Log.d("AppUsageRepository", "Loading data for $packageName: usage=$todayUsage, limit=$currentLimit (from MonitoredAppRepository)")
             
             usageMap[packageName] = AppUsageData(
                 packageName = packageName,

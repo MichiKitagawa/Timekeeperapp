@@ -42,13 +42,40 @@ class MonitoredAppRepository @Inject constructor(
     }
     
     /**
-     * 監視対象アプリを追加/更新
+     * アプリの現在の制限時間を取得
+     */
+    fun getCurrentLimit(packageName: String): Int {
+        // 監視対象アプリかどうかをチェック
+        if (!isAppMonitored(packageName)) {
+            android.util.Log.d("MonitoredAppRepository", 
+                "App $packageName is not monitored, returning -1")
+            return -1
+        }
+        
+        val currentLimit = prefs.getInt("${packageName}_current_limit", -1)
+        android.util.Log.d("MonitoredAppRepository", 
+            "Current limit for $packageName: $currentLimit minutes")
+        return currentLimit
+    }
+    
+    /**
+     * 監視対象アプリを追加（更新は無効）
+     * 
+     * 注意: 一度設定したアプリの制限時間は変更できません。
+     * 重複登録も防止されます。
      */
     fun addOrUpdateMonitoredApp(
         packageName: String,
         initialLimitMinutes: Int,
         targetLimitMinutes: Int
     ): Boolean {
+        // 既に監視対象アプリとして登録されているかチェック
+        if (isAppMonitored(packageName)) {
+            android.util.Log.w("MonitoredAppRepository", 
+                "App $packageName is already monitored. Updates are not allowed.")
+            return false
+        }
+        
         // バリデーション: target_limit < initial_limit
         if (targetLimitMinutes >= initialLimitMinutes) {
             android.util.Log.w("MonitoredAppRepository", 
@@ -56,11 +83,18 @@ class MonitoredAppRepository @Inject constructor(
             return false
         }
         
+        // バリデーション: 値が正の数であること
+        if (initialLimitMinutes <= 0 || targetLimitMinutes <= 0) {
+            android.util.Log.w("MonitoredAppRepository", 
+                "Invalid limits: values must be positive. initial=$initialLimitMinutes, target=$targetLimitMinutes")
+            return false
+        }
+        
         val monitoredApps = prefs.getStringSet("monitored_apps", emptySet())?.toMutableSet() ?: mutableSetOf()
         monitoredApps.add(packageName)
         
         android.util.Log.d("MonitoredAppRepository", 
-            "Adding app $packageName: initial=$initialLimitMinutes, target=$targetLimitMinutes, current=$initialLimitMinutes")
+            "Adding new app $packageName: initial=$initialLimitMinutes, target=$targetLimitMinutes, current=$initialLimitMinutes")
         
         prefs.edit()
             .putStringSet("monitored_apps", monitoredApps)
@@ -69,17 +103,26 @@ class MonitoredAppRepository @Inject constructor(
             .putInt("${packageName}_current_limit", initialLimitMinutes) // 初期値は initial_limit
             .apply()
         
-        android.util.Log.d("MonitoredAppRepository", 
-            "App $packageName saved successfully")
+        android.util.Log.i("MonitoredAppRepository", 
+            "App $packageName successfully added to monitoring")
         
         loadMonitoredApps()
         return true
     }
     
     /**
-     * 監視対象アプリを削除
+     * 監視対象アプリを削除（機能無効化）
+     * 
+     * 注意: 一度設定したアプリの制限は削除できません。
+     * この機能は完全に無効化されています。
      */
     fun removeMonitoredApp(packageName: String) {
+        android.util.Log.w("MonitoredAppRepository", 
+            "Removing monitored app is disabled for security. App: $packageName")
+        
+        // 削除機能は無効化されています
+        // 一度設定したアプリの制限は削除できません
+        /*
         val monitoredApps = prefs.getStringSet("monitored_apps", emptySet())?.toMutableSet() ?: mutableSetOf()
         monitoredApps.remove(packageName)
         
@@ -91,6 +134,55 @@ class MonitoredAppRepository @Inject constructor(
             .apply()
         
         loadMonitoredApps()
+        */
+    }
+    
+    /**
+     * 監視対象アプリの目標時間を更新
+     * 
+     * 注意: 目標時間は短縮のみ可能です（現在の目標時間より短い値のみ）
+     */
+    fun updateMonitoredAppTarget(packageName: String, newTargetLimit: Int): Boolean {
+        // アプリが監視対象かチェック
+        if (!isAppMonitored(packageName)) {
+            android.util.Log.w("MonitoredAppRepository", 
+                "App $packageName is not monitored, cannot update target")
+            return false
+        }
+        
+        // 現在の値を取得
+        val currentTargetLimit = prefs.getInt("${packageName}_target_limit", -1)
+        val currentLimit = prefs.getInt("${packageName}_current_limit", -1)
+        
+        // バリデーション
+        when {
+            newTargetLimit <= 0 -> {
+                android.util.Log.w("MonitoredAppRepository", 
+                    "Invalid target limit: $newTargetLimit must be positive")
+                return false
+            }
+            newTargetLimit >= currentTargetLimit -> {
+                android.util.Log.w("MonitoredAppRepository", 
+                    "Target limit can only be reduced: $newTargetLimit >= current $currentTargetLimit")
+                return false
+            }
+            newTargetLimit >= currentLimit -> {
+                android.util.Log.w("MonitoredAppRepository", 
+                    "Target limit must be less than current limit: $newTargetLimit >= $currentLimit")
+                return false
+            }
+        }
+        
+        // 目標時間を更新
+        prefs.edit()
+            .putInt("${packageName}_target_limit", newTargetLimit)
+            .apply()
+        
+        android.util.Log.i("MonitoredAppRepository", 
+            "Updated target limit for $packageName from $currentTargetLimit to $newTargetLimit minutes")
+        
+        loadMonitoredApps()
+        return true
     }
     
     /**
@@ -136,28 +228,54 @@ class MonitoredAppRepository @Inject constructor(
      * 監視対象アプリ一覧を読み込み
      */
     fun loadMonitoredApps() {
+        android.util.Log.i("MonitoredAppRepository", "=== loadMonitoredApps() called ===")
+        
         val monitoredPackages = prefs.getStringSet("monitored_apps", emptySet()) ?: emptySet()
         val packageManager = context.packageManager
+        
+        android.util.Log.d("MonitoredAppRepository", "Monitored packages from SharedPreferences: $monitoredPackages")
         
         val monitoredAppsList = monitoredPackages.mapNotNull { packageName ->
             try {
                 val appInfo = packageManager.getApplicationInfo(packageName, 0)
                 val appName = packageManager.getApplicationLabel(appInfo).toString()
                 
+                val initialLimit = prefs.getInt("${packageName}_initial_limit", 0)
+                val targetLimit = prefs.getInt("${packageName}_target_limit", 0)
+                val currentLimit = prefs.getInt("${packageName}_current_limit", 0)
+                
+                android.util.Log.i("MonitoredAppRepository", 
+                    "Loading app $appName ($packageName): initial=$initialLimit, target=$targetLimit, current=$currentLimit")
+                
                 MonitoredApp(
                     packageName = packageName,
                     appName = appName,
-                    initialLimitMinutes = prefs.getInt("${packageName}_initial_limit", 0),
-                    targetLimitMinutes = prefs.getInt("${packageName}_target_limit", 0),
-                    currentLimitMinutes = prefs.getInt("${packageName}_current_limit", 0)
+                    initialLimitMinutes = initialLimit,
+                    targetLimitMinutes = targetLimit,
+                    currentLimitMinutes = currentLimit
                 )
             } catch (e: PackageManager.NameNotFoundException) {
                 // アプリがアンインストールされている場合は除外
+                android.util.Log.w("MonitoredAppRepository", "App $packageName not found, excluding from monitoring")
                 null
             }
         }
         
+        android.util.Log.i("MonitoredAppRepository", "Setting StateFlow: ${_monitoredApps.value.size} -> ${monitoredAppsList.size} apps")
+        
+        // 更新前の状態をログ出力
+        _monitoredApps.value.forEach { app ->
+            android.util.Log.d("MonitoredAppRepository", "Before update: ${app.appName} = ${app.currentLimitMinutes} minutes")
+        }
+        
         _monitoredApps.value = monitoredAppsList
+        
+        // 更新後の状態をログ出力
+        _monitoredApps.value.forEach { app ->
+            android.util.Log.i("MonitoredAppRepository", "After update: ${app.appName} = ${app.currentLimitMinutes} minutes")
+        }
+        
+        android.util.Log.i("MonitoredAppRepository", "=== loadMonitoredApps() completed ===")
     }
     
     /**
@@ -184,5 +302,13 @@ class MonitoredAppRepository @Inject constructor(
         prefs.edit().clear().apply()
         _monitoredApps.value = emptyList()
         android.util.Log.d("MonitoredAppRepository", "All data cleared")
+    }
+    
+    /**
+     * データを強制的に再読み込み（外部からの呼び出し用）
+     */
+    fun forceReload() {
+        android.util.Log.d("MonitoredAppRepository", "Force reload requested")
+        loadMonitoredApps()
     }
 } 

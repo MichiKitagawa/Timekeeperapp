@@ -23,7 +23,7 @@ android {
         testInstrumentationRunner = "com.example.timekeeper.CustomTestRunner"
         
         ndk {
-            abiFilters += listOf("x86_64", "arm64-v8a", "x86", "armeabi-v7a")
+            abiFilters += listOf("x86_64", "arm64-v8a")
         }
     }
     sourceSets {
@@ -32,7 +32,6 @@ android {
         }
     }
     
-    // Disable splits for development/debug builds to avoid emulator issues
     splits {
         abi {
             isEnable = false
@@ -40,6 +39,10 @@ android {
     }
     
     buildTypes {
+        debug {
+            isMinifyEnabled = false
+            isDebuggable = true
+        }
         release {
             isMinifyEnabled = false
             proguardFiles(
@@ -53,12 +56,14 @@ android {
     productFlavors {
         create("development") {
             dimension = "version"
-            // 開発用：全てのABIを含める（エミュレータ対応）
+            // 開発用：エミュレーターに最適化
+            // ABI設定を上書きしない
         }
         create("production") {
             dimension = "version"
-            // プロダクション用：最適化されたABI
+            // プロダクション用：実機に最適化
             ndk {
+                abiFilters.clear()
                 abiFilters += listOf("arm64-v8a", "armeabi-v7a")
             }
         }

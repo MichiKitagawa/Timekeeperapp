@@ -15,6 +15,7 @@ from models import (
 )
 import stripe
 from datetime import datetime, timezone
+from google.cloud import firestore
 
 # 定数を定義
 # YOUR_APP_DOMAIN = "https://example.com" # HTTP/HTTPSのダミードメインに変更
@@ -22,7 +23,7 @@ YOUR_HOSTED_DOMAIN = "https://timekeeper-redirect.example.com" # Stripe決済後
 LICENSE_PRICE_ID = "price_1RSoQKCplaJfZ2mW9cv8EVSw" # Stripeダッシュボードで設定したライセンス商品の価格ID
 
 # ngrokのURL (開発時に一時的に使用) - 実行の都度変更が必要な場合があります
-YOUR_NGROK_URL = "https://1e4a-240b-c020-490-84ae-f802-5120-8f34-3ed4.ngrok-free.app"
+YOUR_NGROK_URL = "https://78ac-240b-c020-4b0-ee7b-fc5a-6175-1281-2fe1.ngrok-free.app"
 
 
 @asynccontextmanager
@@ -233,11 +234,18 @@ async def license_confirm(request: LicenseConfirmRequest):
         # ただし、不正なdevice_idによる書き込みを防ぐ意図があればチェックは有効。
         # 今回は「未登録device_id」のテストケースがあるので、ドキュメントが存在しない場合は作成する方針で進める。
 
+        # 重複防止: 同じpurchase_tokenで既に処理済みかチェック
+        if device_doc.exists:
+            device_data = device_doc.to_dict()
+            processed_tokens = device_data.get('processed_purchase_tokens', [])
+            if purchase_token in processed_tokens:
+                print(f"License purchase token {purchase_token} already processed for device {device_id}. Returning success.")
+                return LicenseConfirmResponse(status="ok")
+
         doc_data = {
             'license_purchased': True,
             'license_purchase_date': datetime.now(timezone.utc), # ISO 8601形式で保存
-            # purchase_tokens 配列に今回のトークンを追加することも検討できる
-            # 'purchase_tokens': firestore.ArrayUnion([purchase_token]) # 既存の配列に追加する場合
+            'processed_purchase_tokens': firestore.ArrayUnion([purchase_token])
         }
         if device_doc.exists:
             # 既に購入済みの場合の処理も考慮 (例: エラーとするか、上書きするか)
@@ -248,7 +256,6 @@ async def license_confirm(request: LicenseConfirmRequest):
             # ドキュメントが存在しない場合は新規作成
             device_ref.set(doc_data)
             print(f"License information created for device_id: {device_id}")
-
 
     except Exception as e:
         # Firestoreエラー
@@ -336,14 +343,28 @@ async def unlock_daypass(request: UnlockDaypassRequest):
                 detail={"error_code": "device_not_found", "message": "device_id が未登録です"}
             )
 
-        current_unlock_count = device_doc.to_dict().get('unlock_count', 0)
+        device_data = device_doc.to_dict()
+        
+        # 重複防止: 同じpurchase_tokenで既に処理済みかチェック
+        processed_tokens = device_data.get('processed_purchase_tokens', [])
+        if purchase_token in processed_tokens:
+            print(f"Purchase token {purchase_token} already processed for device {device_id}. Returning current state.")
+            current_unlock_count = device_data.get('unlock_count', 0)
+            current_date = device_data.get('last_unlock_date', datetime.now(timezone.utc).strftime("%Y-%m-%d"))
+            return UnlockDaypassResponse(
+                status="ok",
+                unlock_count=current_unlock_count,
+                last_unlock_date=current_date
+            )
+
+        current_unlock_count = device_data.get('unlock_count', 0)
         new_unlock_count = current_unlock_count + 1
         today_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
         update_data = {
             'unlock_count': new_unlock_count,
-            'last_unlock_date': today_str # FirestoreのDate型ではなく文字列で保存（仕様書と合わせる）
-            # 'purchase_tokens': firestore.ArrayUnion([purchase_token]) # 既存の配列に追加する場合
+            'last_unlock_date': today_str,
+            'processed_purchase_tokens': firestore.ArrayUnion([purchase_token])
         }
         device_ref.update(update_data)
         print(f"Daypass unlock information updated for device_id: {device_id}. New unlock_count: {new_unlock_count}")
@@ -430,12 +451,22 @@ async def stripe_webhook(request: FastAPIRequest):
         try:
             if product_type == "license":
                 device_ref = db.collection('devices').document(device_id)
+                
+                # 重複防止チェック
+                current_doc = device_ref.get()
+                if current_doc.exists:
+                    current_data = current_doc.to_dict()
+                    processed_tokens = current_data.get('processed_purchase_tokens', [])
+                    if session.id in processed_tokens:
+                        print(f"Webhook: License session {session.id} already processed for device {device_id}. Skipping.")
+                        return {"status": "received", "message": "Already processed"}
+                
                 doc_data = {
                     'license_purchased': True,
                     'license_purchase_date': datetime.now(timezone.utc),
-                    'last_successful_payment_intent': session.get('payment_intent')
+                    'last_successful_payment_intent': session.get('payment_intent'),
+                    'processed_purchase_tokens': firestore.ArrayUnion([session.id])
                 }
-                current_doc = device_ref.get()
                 if current_doc.exists:
                     device_ref.update(doc_data)
                     print(f"Webhook: License updated for device_id: {device_id}")
@@ -451,13 +482,21 @@ async def stripe_webhook(request: FastAPIRequest):
                     return {"status": "error", "message": "Device not found for daypass, event not processed further."}
                 
                 current_data = device_doc.to_dict()
+                
+                # 重複防止: 同じsession_idで既に処理済みかチェック
+                processed_tokens = current_data.get('processed_purchase_tokens', [])
+                if session.id in processed_tokens:
+                    print(f"Webhook: Session {session.id} already processed for device {device_id}. Skipping.")
+                    return {"status": "received", "message": "Already processed"}
+                
                 current_unlock_count = current_data.get('unlock_count', 0) if current_data else 0
                 new_unlock_count = current_unlock_count + 1
                 today_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
                 update_data = {
                     'unlock_count': new_unlock_count,
                     'last_unlock_date': today_str,
-                    'last_successful_payment_intent': session.get('payment_intent')
+                    'last_successful_payment_intent': session.get('payment_intent'),
+                    'processed_purchase_tokens': firestore.ArrayUnion([session.id])
                 }
                 device_ref.update(update_data)
                 print(f"Webhook: Daypass updated for device_id: {device_id}. New unlock_count: {new_unlock_count}")

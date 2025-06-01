@@ -7,6 +7,8 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -26,11 +28,16 @@ fun MonitoringSetupScreen(
     val installedApps by viewModel.installedApps.collectAsState()
     val monitoredApps by viewModel.monitoredApps.collectAsState()
     
+    // 既に監視対象のアプリを除外したリストを作成
+    val availableApps = installedApps.filter { app ->
+        !monitoredApps.any { monitored -> monitored.packageName == app.packageName }
+    }
+    
     // デバッグログ
-    LaunchedEffect(installedApps) {
-        android.util.Log.d("MonitoringSetupScreen", "Installed apps updated: ${installedApps.size} apps")
-        installedApps.take(3).forEach { app ->
-            android.util.Log.d("MonitoringSetupScreen", "App: ${app.appName}")
+    LaunchedEffect(installedApps, monitoredApps) {
+        android.util.Log.d("MonitoringSetupScreen", "Installed apps: ${installedApps.size}, Monitored apps: ${monitoredApps.size}, Available apps: ${availableApps.size}")
+        availableApps.take(3).forEach { app ->
+            android.util.Log.d("MonitoringSetupScreen", "Available app: ${app.appName}")
         }
     }
     
@@ -77,7 +84,9 @@ fun MonitoringSetupScreen(
                         items(monitoredApps) { app ->
                             MonitoredAppItem(
                                 app = app,
-                                onRemove = { viewModel.removeMonitoredApp(app.packageName) }
+                                onUpdateTarget = { packageName, newTarget ->
+                                    viewModel.updateMonitoredAppTarget(packageName, newTarget)
+                                }
                             )
                         }
                     }
@@ -87,14 +96,19 @@ fun MonitoringSetupScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // アプリ追加ボタン
+        // アプリ追加ボタン - 追加可能なアプリがない場合は無効化
         Button(
             onClick = { showAddDialog = true },
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth(),
+            enabled = availableApps.isNotEmpty()
         ) {
             Icon(Icons.Default.Add, contentDescription = null)
             Spacer(modifier = Modifier.width(8.dp))
+            if (availableApps.isEmpty()) {
+                Text("全てのアプリが設定済みです")
+            } else {
             Text("アプリを追加")
+            }
         }
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -122,7 +136,7 @@ fun MonitoringSetupScreen(
             title = { Text("アプリを追加") },
             text = {
                 Column {
-                    // アプリ選択
+                    // アプリ選択 - 利用可能なアプリのみ表示
                     var expanded by remember { mutableStateOf(false) }
                     
                     ExposedDropdownMenuBox(
@@ -131,7 +145,7 @@ fun MonitoringSetupScreen(
                     ) {
                         OutlinedTextField(
                             value = selectedApp?.let { packageName ->
-                                installedApps.find { it.packageName == packageName }?.appName
+                                availableApps.find { it.packageName == packageName }?.appName
                             } ?: "",
                             onValueChange = { },
                             readOnly = true,
@@ -146,7 +160,8 @@ fun MonitoringSetupScreen(
                             expanded = expanded,
                             onDismissRequest = { expanded = false }
                         ) {
-                            installedApps.forEach { app ->
+                            // 利用可能なアプリのみ表示（既に監視対象のアプリは除外）
+                            availableApps.forEach { app ->
                                 DropdownMenuItem(
                                     text = { Text(app.appName) },
                                     onClick = {
@@ -249,8 +264,12 @@ fun MonitoringSetupScreen(
 @Composable
 private fun MonitoredAppItem(
     app: com.example.timekeeper.data.MonitoredAppRepository.MonitoredApp,
-    onRemove: () -> Unit
+    onUpdateTarget: (String, Int) -> Unit = { _, _ -> } // 目標時間更新用コールバック
 ) {
+    var showEditDialog by remember { mutableStateOf(false) }
+    var newTargetLimit by remember { mutableStateOf(app.targetLimitMinutes.toString()) }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -269,19 +288,115 @@ private fun MonitoredAppItem(
                     style = MaterialTheme.typography.titleSmall
                 )
                 Text(
-                    text = "現在: ${app.currentLimitMinutes}分 → 目標: ${app.targetLimitMinutes}分",
+                    text = "初期: ${app.initialLimitMinutes}分（変更不可）",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+                Text(
+                    text = "現在: ${app.currentLimitMinutes}分 → 目標: ${app.targetLimitMinutes}分",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Text(
+                    text = "※目標時間のみ短縮可能",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.secondary,
+                    modifier = Modifier.padding(top = 4.dp)
+                )
             }
             
-            IconButton(onClick = onRemove) {
+            // 目標時間編集ボタン
+            IconButton(onClick = { 
+                showEditDialog = true
+                newTargetLimit = app.targetLimitMinutes.toString()
+                errorMessage = null
+            }) {
                 Icon(
-                    Icons.Default.Delete,
-                    contentDescription = "削除",
-                    tint = MaterialTheme.colorScheme.error
+                    Icons.Default.Edit,
+                    contentDescription = "目標時間を編集",
+                    tint = MaterialTheme.colorScheme.primary
                 )
             }
         }
+    }
+
+    // 目標時間編集ダイアログ
+    if (showEditDialog) {
+        AlertDialog(
+            onDismissRequest = { 
+                showEditDialog = false
+                errorMessage = null
+            },
+            title = { Text("目標時間の変更") },
+            text = {
+                Column {
+                    Text(
+                        text = "現在の目標時間: ${app.targetLimitMinutes}分",
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.padding(bottom = 16.dp)
+                    )
+                    
+                    OutlinedTextField(
+                        value = newTargetLimit,
+                        onValueChange = { newTargetLimit = it },
+                        label = { Text("新しい目標時間（分）") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    
+                    Text(
+                        text = "※現在の目標時間より短い値のみ設定できます",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.secondary,
+                        modifier = Modifier.padding(top = 8.dp)
+                    )
+                    
+                    // エラーメッセージ
+                    errorMessage?.let { message ->
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = message,
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val newTarget = newTargetLimit.toIntOrNull()
+                        when {
+                            newTarget == null || newTarget <= 0 -> {
+                                errorMessage = "1以上の数値を入力してください"
+                            }
+                            newTarget >= app.targetLimitMinutes -> {
+                                errorMessage = "現在の目標時間（${app.targetLimitMinutes}分）より短く設定してください"
+                            }
+                            newTarget >= app.currentLimitMinutes -> {
+                                errorMessage = "現在の制限時間（${app.currentLimitMinutes}分）より短く設定してください"
+                            }
+                            else -> {
+                                onUpdateTarget(app.packageName, newTarget)
+                                showEditDialog = false
+                                errorMessage = null
+                            }
+                        }
+                    }
+                ) {
+                    Text("変更")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { 
+                        showEditDialog = false
+                        errorMessage = null
+                    }
+                ) {
+                    Text("キャンセル")
+                }
+            }
+        )
     }
 } 

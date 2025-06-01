@@ -41,13 +41,16 @@ object RepositoryModule {
 
     @Provides
     @Singleton
-    fun provideAppUsageRepository(@ApplicationContext context: Context): AppUsageRepository {
-        return AppUsageRepository(context)
+    fun provideMonitoredAppRepository(@ApplicationContext context: Context): MonitoredAppRepository {
+        return MonitoredAppRepository(context)
     }
 
     @Provides
     @Singleton
-    fun provideMonitoredAppRepository(@ApplicationContext context: Context): MonitoredAppRepository {
-        return MonitoredAppRepository(context)
+    fun provideAppUsageRepository(
+        @ApplicationContext context: Context,
+        monitoredAppRepository: MonitoredAppRepository
+    ): AppUsageRepository {
+        return AppUsageRepository(context, monitoredAppRepository)
     }
 } 

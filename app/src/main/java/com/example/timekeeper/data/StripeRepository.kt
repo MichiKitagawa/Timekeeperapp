@@ -86,9 +86,12 @@ class StripeRepository(
                     } else if (productType == "daypass") {
                         // テスト用のデイパス情報
                         val currentDate = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
+                        // サーバー側でもカウントアップされるため、実際のAPIコールをシミュレートして
+                        // 現在のカウント+1の値を直接設定（二重カウントアップを避ける）
                         val currentUnlockCount = purchaseStateManager.getDaypassUnlockCount()
-                        purchaseStateManager.updateDaypassUnlockCount(currentUnlockCount + 1, currentDate)
-                        Log.i(TAG, "Test: Daypass unlock state updated locally: count=${currentUnlockCount + 1}, date=$currentDate")
+                        val newUnlockCount = currentUnlockCount + 1
+                        purchaseStateManager.updateDaypassUnlockCount(newUnlockCount, currentDate)
+                        Log.i(TAG, "Test: Daypass unlock state updated locally: count=$newUnlockCount, date=$currentDate")
                     }
                     
                     Log.i(TAG, "Test: Payment confirmed successfully for $productType")
