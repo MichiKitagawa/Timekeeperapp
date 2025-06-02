@@ -6,6 +6,8 @@ import com.example.timekeeper.data.PurchaseStateManager
 import com.example.timekeeper.data.MonitoredAppRepository
 import com.example.timekeeper.data.AppUsageRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -23,6 +25,9 @@ class SecurityManager @Inject constructor(
         // 🔧 デバッグ用フラグ - 本番リリース前にfalseに戻すこと！
         private const val SECURITY_CHECKS_DISABLED_FOR_DEBUG = false
     }
+
+    private val _onDataResetComplete = MutableSharedFlow<Unit>(replay = 1)
+    val onDataResetComplete = _onDataResetComplete.asSharedFlow()
 
     /**
      * デバッグ用：セキュリティチェックが無効化されているかを確認
@@ -86,6 +91,8 @@ class SecurityManager @Inject constructor(
             }
             
             Log.w(TAG, "🚨 BACKGROUND data reset completed successfully. Reason: $reason")
+            Log.i(TAG, "🔔 Emitting data reset completion event")
+            _onDataResetComplete.tryEmit(Unit)
             
         } catch (e: Exception) {
             Log.e(TAG, "❌ Error during background data reset", e)

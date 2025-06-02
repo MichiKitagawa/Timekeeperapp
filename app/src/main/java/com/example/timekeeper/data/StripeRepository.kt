@@ -36,31 +36,52 @@ class StripeRepository(
             try {
                 Log.i(TAG, "Creating Stripe checkout session for device=$deviceId, product=$productType, unlockCount=$unlockCount")
                 
+                // リクエストオブジェクトの作成とログ出力
+                val request = CreateCheckoutSessionRequest(
+                    device_id = deviceId,
+                    product_type = productType,
+                    unlock_count = unlockCount
+                )
+                Log.d(TAG, "Request object created: device_id=${request.device_id}, product_type=${request.product_type}, unlock_count=${request.unlock_count}")
+                
                 // 実際のAPI呼び出しを試行
                 try {
-                    val response = apiService.createCheckoutSession(
-                        CreateCheckoutSessionRequest(
-                            device_id = deviceId,
-                            product_type = productType,
-                            unlock_count = unlockCount
-                        )
-                    )
+                    Log.d(TAG, "Calling apiService.createCheckoutSession...")
+                    val response = apiService.createCheckoutSession(request)
+                    
+                    Log.d(TAG, "API call completed. Response code: ${response.code()}")
+                    Log.d(TAG, "Response successful: ${response.isSuccessful}")
                     
                     if (response.isSuccessful) {
-                        val checkoutUrl = response.body()?.checkout_url
+                        val responseBody = response.body()
+                        Log.d(TAG, "Response body: $responseBody")
+                        
+                        val checkoutUrl = responseBody?.checkout_url
                         Log.i(TAG, "Stripe checkout session created successfully: $checkoutUrl")
                         return@withContext checkoutUrl
                     } else {
-                        Log.e(TAG, "Failed to create checkout session: ${response.code()} - ${response.errorBody()?.string()}")
+                        val errorBody = response.errorBody()?.string()
+                        Log.e(TAG, "Failed to create checkout session: ${response.code()} - $errorBody")
                         return@withContext null
                     }
                 } catch (networkException: Exception) {
                     Log.e(TAG, "Network error during checkout session creation", networkException)
+                    Log.e(TAG, "Exception type: ${networkException.javaClass.simpleName}")
+                    Log.e(TAG, "Exception message: ${networkException.message}")
+                    
+                    // Gson/型変換関連のエラーの場合、追加情報をログ出力
+                    if (networkException is ClassCastException) {
+                        Log.e(TAG, "ClassCastException detected - this is likely a Gson/ProGuard issue")
+                        Log.e(TAG, "Make sure ProGuard rules are correctly configured for Gson/Retrofit")
+                    }
+                    
                     return@withContext null
                 }
                 
             } catch (e: Exception) {
                 Log.e(TAG, "Exception in createCheckoutSession", e)
+                Log.e(TAG, "Exception type: ${e.javaClass.simpleName}")
+                Log.e(TAG, "Exception message: ${e.message}")
                 null
             }
         }

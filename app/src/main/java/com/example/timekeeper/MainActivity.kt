@@ -117,6 +117,18 @@ class MainActivity : ComponentActivity() {
                 val context = LocalContext.current
                 val startDestination = determineStartDestination()
 
+                // SecurityManagerからのデータリセットイベントを監視
+                LaunchedEffect(Unit) {
+                    Log.i("MainActivity", "🔔 Starting to collect SecurityManager data reset events")
+                    securityManager.onDataResetComplete.collect {
+                        Log.i("MainActivity", "🔔 Data reset event received, navigating to SETUP_AND_LICENSE")
+                        navController.navigate(TimekeeperRoutes.SETUP_AND_LICENSE) {
+                            popUpTo(navController.graph.startDestinationId) { inclusive = true }
+                            launchSingleTop = true
+                        }
+                    }
+                }
+
                 // LockScreenActivityからのインテント処理
                 LaunchedEffect(Unit) {
                     intent?.getStringExtra("navigate_to")?.let { destination ->
@@ -159,17 +171,9 @@ class MainActivity : ComponentActivity() {
                                 
                                 // アクセシビリティサービスにブロック解除を通知
                                 try {
-                                    val serviceClass = Class.forName("com.example.timekeeper.service.MyAccessibilityService")
-                                    val getInstanceMethod = serviceClass.getMethod("getInstance")
-                                    val serviceInstance = getInstanceMethod.invoke(null)
-                                    
-                                    if (serviceInstance != null) {
-                                        val onDayPassPurchasedMethod = serviceClass.getMethod("onDayPassPurchasedForAllApps")
-                                        onDayPassPurchasedMethod.invoke(serviceInstance)
-                                        Log.i("MainActivity", "Successfully notified accessibility service about day pass purchase")
-                                    } else {
-                                        Log.w("MainActivity", "Accessibility service instance is null - service may not be running")
-                                    }
+                                    // 修正: notifyDailyResetメソッドを使用してブロック解除
+                                    MyAccessibilityService.notifyDailyReset()
+                                    Log.i("MainActivity", "Successfully notified accessibility service about day pass purchase")
                                 } catch (e: Exception) {
                                     Log.e("MainActivity", "Failed to notify accessibility service about day pass purchase", e)
                                 }

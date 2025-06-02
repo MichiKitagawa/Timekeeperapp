@@ -10,6 +10,7 @@ import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 import com.example.timekeeper.data.AppUsageRepository
 import com.example.timekeeper.data.MonitoredAppRepository
+import com.example.timekeeper.util.SecurityManager
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 
@@ -21,6 +22,9 @@ class MyAccessibilityService : AccessibilityService() {
     
     @Inject
     lateinit var monitoredAppRepository: MonitoredAppRepository
+    
+    @Inject
+    lateinit var securityManager: SecurityManager
     
     private val handler = Handler(Looper.getMainLooper())
     private var currentForegroundApp: String? = null
@@ -403,46 +407,14 @@ class MyAccessibilityService : AccessibilityService() {
     override fun onDestroy() {
         super.onDestroy()
         instance = null
-        Log.i(TAG, "🛑 Accessibility service destroyed - performing complete app reset")
+        Log.i(TAG, "🛑 Accessibility service destroyed - delegating to SecurityManager")
         
         try {
-            // 全データを完全にクリア
-            val context = applicationContext
-            
-            // AppUsageRepositoryのデータをクリア
-            val appUsagePrefs = context.getSharedPreferences("app_usage", Context.MODE_PRIVATE)
-            appUsagePrefs.edit().clear().apply()
-            Log.i(TAG, "✅ App usage data cleared")
-            
-            // MonitoredAppRepositoryのデータをクリア
-            val monitoredAppPrefs = context.getSharedPreferences("monitored_apps", Context.MODE_PRIVATE)
-            monitoredAppPrefs.edit().clear().apply()
-            Log.i(TAG, "✅ Monitored apps data cleared")
-            
-            // PurchaseStateManagerのデータをクリア
-            val purchasePrefs = context.getSharedPreferences("purchase_state", Context.MODE_PRIVATE)
-            purchasePrefs.edit().clear().apply()
-            Log.i(TAG, "✅ Purchase state data cleared")
-            
-            // TimekeeperPrefsのデータもクリア
-            val timekeeperPrefs = context.getSharedPreferences("TimekeeperPrefs", Context.MODE_PRIVATE)
-            timekeeperPrefs.edit().clear().apply()
-            Log.i(TAG, "✅ Timekeeper preferences cleared")
-            
-            // RepositoryのStateFlowを更新するため、clearAllDataメソッドを呼び出し
-            try {
-                appUsageRepository.clearAllData()
-                monitoredAppRepository.clearAllData()
-                Log.i(TAG, "✅ Repository StateFlows updated")
-            } catch (e: Exception) {
-                Log.e(TAG, "❌ Failed to update repository StateFlows", e)
-            }
-            
-            Log.w(TAG, "🚨 COMPLETE RESET: All app data has been cleared due to accessibility service destruction")
-            Log.w(TAG, "💰 User must purchase license again to use the app")
-            
+            // SecurityManagerに処理を委譲
+            securityManager.handleAccessibilityDisabled()
+            Log.i(TAG, "✅ SecurityManager.handleAccessibilityDisabled() called successfully")
         } catch (e: Exception) {
-            Log.e(TAG, "❌ Failed to perform complete reset on service destruction", e)
+            Log.e(TAG, "❌ Failed to call SecurityManager.handleAccessibilityDisabled()", e)
         }
         
         stopUsageTracking()

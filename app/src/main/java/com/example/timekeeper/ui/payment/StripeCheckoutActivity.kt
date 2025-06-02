@@ -200,10 +200,37 @@ fun StripeCheckoutScreen(
                                             onPaymentComplete(sessionId, productType)
                                             return
                                         }
-                                    } else if (pathSegments.contains("checkout-cancel")) {
+                                    
                                         Log.i("StripeCheckoutActivity", "=== Calling onPaymentCancelled from fallback ===")
                                         onPaymentCancelled()
                                         return
+                                    }
+                                }
+                                
+                                // 404エラーかつWeb URLで決済関連の場合も処理
+                                if ((errorCode == -6 || errorCode == -2) && failingUrl != null) { // ERROR_FILE_NOT_FOUND or ERROR_HOST_LOOKUP
+                                    val uri = Uri.parse(failingUrl)
+                                    if (uri.scheme == "https" && (uri.host == "v0-timekeeper.vercel.app" || uri.host?.contains("timekeeper") == true)) {
+                                        Log.i("StripeCheckoutActivity", "=== 404 error on timekeeper domain, checking for payment result in URL ===")
+                                        val pathSegments = uri.pathSegments
+                                        
+                                        if (pathSegments.contains("payment") && pathSegments.contains("success")) {
+                                            val sessionId = uri.getQueryParameter("session_id")
+                                            val productType = uri.getQueryParameter("product_type")
+                                            Log.i("StripeCheckoutActivity", "404 Fallback - Session ID: $sessionId, Product Type: $productType")
+                                            
+                                            if (sessionId != null && productType != null) {
+                                                Log.i("StripeCheckoutActivity", "=== Calling onPaymentComplete from 404 fallback ===")
+                                                onPaymentComplete(sessionId, productType)
+                                                return
+                                            }
+                                        }
+                                        
+                                        if (pathSegments.contains("payment") && pathSegments.contains("cancel")) {
+                                            Log.i("StripeCheckoutActivity", "=== Calling onPaymentCancelled from 404 fallback ===")
+                                            onPaymentCancelled()
+                                            return
+                                        }
                                     }
                                 }
                                 
@@ -238,24 +265,42 @@ fun StripeCheckoutScreen(
                                                 return true
                                             }
                                         } else if (pathSegments.contains("checkout-cancel")) {
-                                            Log.i("StripeCheckoutActivity", "=== Checkout cancel deep link ===")
-                                            Log.i("StripeCheckoutActivity", "=== Calling onPaymentCancelled ===")
+                                            Log.i("StripeCheckoutActivity", "=== Checkout cancelled deep link ===")
                                             onPaymentCancelled()
                                             return true
                                         }
                                     }
                                     
-                                    // 通常のHTTPSページの場合はページ読み込み完了を待つ
-                                    if (uri.scheme == "https") {
-                                        // ページ読み込みが完了していない場合はディープリンク処理をスキップ
-                                        if (!pageLoadCompleted) {
-                                            Log.i("StripeCheckoutActivity", "=== HTTPS page not fully loaded yet, allowing normal loading ===")
-                                            return false
+                                    // Web URLでの決済完了/キャンセル処理
+                                    if (uri.scheme == "https" && (uri.host == "v0-timekeeper.vercel.app" || uri.host?.contains("timekeeper") == true)) {
+                                        Log.i("StripeCheckoutActivity", "=== Web URL detected, checking for payment result ===")
+                                        val pathSegments = uri.pathSegments
+                                        
+                                        // Success URL pattern: /payment/success/checkout-success.html または /payment/success
+                                        if (pathSegments.contains("payment") && pathSegments.contains("success")) {
+                                            Log.i("StripeCheckoutActivity", "=== Web checkout success detected ===")
+                                            val sessionId = uri.getQueryParameter("session_id")
+                                            val productType = uri.getQueryParameter("product_type")
+                                            Log.i("StripeCheckoutActivity", "Web Success - Session ID: $sessionId, Product Type: $productType")
+                                            
+                                            if (sessionId != null && productType != null) {
+                                                Log.i("StripeCheckoutActivity", "=== Calling onPaymentComplete from Web URL ===")
+                                                onPaymentComplete(sessionId, productType)
+                                                return true
+                                            }
+                                        }
+                                        
+                                        // Cancel URL pattern: /payment/cancel
+                                        if (pathSegments.contains("payment") && pathSegments.contains("cancel")) {
+                                            Log.i("StripeCheckoutActivity", "=== Web checkout cancelled detected ===")
+                                            onPaymentCancelled()
+                                            return true
                                         }
                                     }
+                                    
+                                    Log.i("StripeCheckoutActivity", "=== No deep link detected, proceeding with normal URL loading ===")
                                 }
                                 
-                                Log.i("StripeCheckoutActivity", "=== No deep link detected, proceeding with normal URL loading ===")
                                 return false
                             }
                         }
