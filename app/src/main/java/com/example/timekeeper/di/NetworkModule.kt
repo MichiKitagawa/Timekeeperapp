@@ -1,6 +1,7 @@
 package com.example.timekeeper.di
 
 import com.example.timekeeper.data.api.TimekeeperApiService
+import com.google.gson.GsonBuilder
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -22,7 +23,7 @@ object NetworkModule {
         val loggingInterceptor = HttpLoggingInterceptor().apply {
             level = HttpLoggingInterceptor.Level.BODY
         }
-        
+
         return OkHttpClient.Builder()
             .addInterceptor(loggingInterceptor)
             .connectTimeout(30, TimeUnit.SECONDS)
@@ -34,10 +35,14 @@ object NetworkModule {
     @Provides
     @Singleton
     fun provideRetrofit(okHttpClient: OkHttpClient): Retrofit {
+        val gson = GsonBuilder()
+            .setLenient()
+            .create()
+
         return Retrofit.Builder()
-            .baseUrl("https://timekeeper-backend-827754096486.asia-northeast1.run.app") // 本番環境用APIエンドポイントに変更してください
+            .baseUrl("https://timekeeper-backend-827754096486.asia-northeast1.run.app")
             .client(okHttpClient)
-            .addConverterFactory(GsonConverterFactory.create())
+            .addConverterFactory(GsonConverterFactory.create(gson)) // ← 修正ポイント
             .build()
     }
 
@@ -46,4 +51,4 @@ object NetworkModule {
     fun provideTimekeeperApiService(retrofit: Retrofit): TimekeeperApiService {
         return retrofit.create(TimekeeperApiService::class.java)
     }
-} 
+}
