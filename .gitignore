@@ -18,6 +18,21 @@ local.properties
 
 timekee-b5863-firebase-adminsdk-fbsvc-9ad9aa5ac6.json
 
+# APK Files - バイナリファイルは除外
+*.apk
+*.aab
+*.ap_
+*.dex
+
+# Keystore files - 機密情報のため除外
+*.keystore
+*.jks
+keystore.properties
+
+# Release packages - リリースパッケージは除外
+release-package/*.apk
+release-package/*.aab
+
 # Python
 __pycache__/
 *.py[cod]
